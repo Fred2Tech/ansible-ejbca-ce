@@ -1,0 +1,141 @@
+{{ ansible_managed | comment }}
+
+<VirtualHost *:80>
+    ServerName {{ httpd_identity_info.id_name }}
+    DocumentRoot /var/www/html
+    ProxyPreserveHost On
+    ProxyRequests Off
+    AllowEncodedSlashes On
+    RewriteEngine On
+
+{% if inventory_hostname in groups['eeCaServers'] or inventory_hostname in groups['eeRaServers'] or inventory_hostname in groups['eeVaServers'] or inventory_hostname in groups['ceServers'] %}
+    RewriteRule ^/ejbca/publicweb/?$ https://%{HTTP_HOST}/ca-certificates-and-crls/ [R=302,L]
+    RewriteRule ^/ejbca/publicweb/webdist/?$ https://%{HTTP_HOST}/ca-certificates-and-crls/ [R=302,L]
+    ProxyPass /ejbca/ ajp://127.0.0.1:8009/ejbca/
+    ProxyPassReverse /ejbca/ ajp://127.0.0.1:8009/ejbca/
+{% if (use_external_va is defined and use_external_va is sameas false) or inventory_hostname in groups['eeVaServers'] %}
+    ProxyPass /ocsp ajp://127.0.0.1:8009/ejbca/publicweb/status/ocsp
+    ProxyPassReverse /ocsp ajp://127.0.0.1:8009/ejbca/publicweb/status/ocsp
+{% endif %}
+{% if use_httpd_crl_map is defined and use_httpd_crl_map is sameas true %}
+    RewriteMap vanityCrlLC int:tolower
+    RewriteMap vanityCrls "txt:{{ httpd_rewrite_maps_dir }}/crlmapping.txt"
+    RewriteRule "^.*/CRL/(.+)\.crl" "/ejbca/publicweb/crls/search.cgi?{{ httpd_crl_hash_type|default('iHash') }}=${vanityCrls:${vanityCrlLC:$1}|$1}" [PT,QSA,E=vanityCrl:$1]
+    RewriteRule "^.*/CRLs/(.+)\.crl" "/ejbca/publicweb/crls/search.cgi?{{ httpd_crl_hash_type|default('iHash') }}=${vanityCrls:${vanityCrlLC:$1}|$1}" [PT,QSA,E=vanityCrl:$1]
+    RewriteRule "^.*/crl/(.+)\.crl" "/ejbca/publicweb/crls/search.cgi?{{ httpd_crl_hash_type|default('iHash') }}=${vanityCrls:${vanityCrlLC:$1}|$1}" [PT,QSA,E=vanityCrl:$1]
+    RewriteRule "^.*/crls/(.+)\.crl" "/ejbca/publicweb/crls/search.cgi?{{ httpd_crl_hash_type|default('iHash') }}=${vanityCrls:${vanityCrlLC:$1}|$1}" [PT,QSA,E=vanityCrl:$1]
+    Header unset Content-disposition env=vanityCrl
+{% endif %}
+{% if use_httpd_aia_map is defined and use_httpd_aia_map is sameas true %}
+    RewriteMap vanityAiaLC int:tolower
+    RewriteMap vanityAias "txt:{{ httpd_rewrite_maps_dir }}/aiamapping.txt"
+    RewriteRule "^.*/aia/(.+)\.crt" "/ejbca/publicweb/certificates/search.cgi?{{ httpd_aia_hash_type|default('sHash') }}=${vanityAias:${vanityAiaLC:$1}|$1}" [PT,QSA,E=vanityAia:$1]
+    RewriteRule "^.*/AIA/(.+)\.crt" "/ejbca/publicweb/certificates/search.cgi?{{ httpd_aia_hash_type|default('sHash') }}=${vanityAias:${vanityAiaLC:$1}|$1}" [PT,QSA,E=vanityAia:$1]
+    Header unset Content-disposition env=vanityAia
+{% endif %}
+    RewriteCond %{REQUEST_URI} !^/ocsp/?$
+    RewriteRule ^/(.*)$ https://%{HTTP_HOST}/$1 [R=302,L]
+{% endif %}
+
+{% if inventory_hostname in groups['eeSignServers'] or inventory_hostname in groups['ceSignServers'] %}
+    ProxyPass /signserver/ ajp://127.0.0.1:8009/signserver/
+    ProxyPassReverse /signserver/ ajp://127.0.0.1:8009/signserver/
+    RewriteRule ^/(.*)$ https://%{HTTP_HOST}/$1 [R=302,L]
+{% endif %}
+</VirtualHost>
+
+<IfModule mod_ssl.c>
+<VirtualHost *:443>
+    ServerName {{ httpd_identity_info.id_name }}
+    DocumentRoot /var/www/html
+    Alias /ca-certificates-and-crls/ {{ httpd_public_download_dir }}/
+    ProxyPreserveHost On
+    ProxyRequests Off
+    AllowEncodedSlashes On
+    SSLEngine on
+    SSLProtocol -all +TLSv1.2
+    SSLCipherSuite ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384
+    SSLHonorCipherOrder off
+    SSLSessionTickets off
+    SSLCertificateFile {{ httpd_tls_cert_file }}
+    SSLCertificateKeyFile {{ httpd_tls_key_file }}
+    SSLCertificateChainFile {{ httpd_tls_chain_file }}
+    SSLCACertificateFile {{ httpd_trusted_ca_file }}
+    SSLOptions +StdEnvVars +FakeBasicAuth +StrictRequire
+    SSLProxyEngine On
+    SSLProxyCheckPeerName off
+    SSLProxyCheckPeerCN off
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    RequestHeader set SSL_CLIENT_CERT "%{SSL_CLIENT_CERT}s"
+    ErrorLog ${APACHE_LOG_DIR}/ejbca-ssl-error.log
+    CustomLog ${APACHE_LOG_DIR}/ejbca-ssl-access.log combined
+    RewriteEngine On
+
+    <Directory {{ httpd_public_download_dir }}>
+        Options -Indexes
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+{% if inventory_hostname in groups['eeCaServers'] or inventory_hostname in groups['eeRaServers'] or inventory_hostname in groups['eeVaServers'] or inventory_hostname in groups['ceServers'] %}
+    RewriteRule ^/ejbca/publicweb/?$ /ca-certificates-and-crls/ [R=302,L]
+    RewriteRule ^/ejbca/publicweb/webdist/?$ /ca-certificates-and-crls/ [R=302,L]
+    <Location /ejbca/peer/v1>
+        SSLVerifyClient require
+        SSLVerifyDepth 4
+        SSLOptions +ExportCertData +StrictRequire +StdEnvVars
+    </Location>
+
+    <Location /ejbca/adminweb>
+        SSLVerifyClient optional
+        SSLVerifyDepth 4
+        SSLOptions +ExportCertData +StrictRequire +StdEnvVars
+    </Location>
+
+    <Location /ejbca/ejbca-rest-api>
+        SSLVerifyClient optional
+        SSLVerifyDepth 4
+        SSLOptions +ExportCertData +StrictRequire +StdEnvVars
+    </Location>
+
+    <Location /ejbca/ejbcaws>
+        SSLVerifyClient optional
+        SSLVerifyDepth 4
+        SSLOptions +ExportCertData +StrictRequire +StdEnvVars
+    </Location>
+
+    <Location /ejbca/ra>
+        SSLVerifyClient optional
+        SSLVerifyDepth 4
+        SSLOptions +ExportCertData +StrictRequire +StdEnvVars
+    </Location>
+
+    ProxyPass /ejbca/ ajp://127.0.0.1:8009/ejbca/
+    ProxyPassReverse /ejbca/ ajp://127.0.0.1:8009/ejbca/
+    ProxyPass /.well-known/ ajp://127.0.0.1:8009/.well-known/
+    ProxyPassReverse /.well-known/ ajp://127.0.0.1:8009/.well-known/
+
+    RewriteRule ^/?$ /ejbca/ra/ [R=302,L]
+{% endif %}
+
+{% if inventory_hostname in groups['eeSignServers'] or inventory_hostname in groups['ceSignServers'] %}
+    <Location /signserver/adminweb>
+        SSLVerifyClient require
+        SSLVerifyDepth 4
+        SSLOptions +ExportCertData +StrictRequire +StdEnvVars
+    </Location>
+
+    <Location /signserver/process>
+        SSLVerifyClient optional
+        SSLVerifyDepth 4
+        SSLOptions +ExportCertData +StrictRequire +StdEnvVars
+        SSLRenegBufferSize 10486000
+    </Location>
+
+    ProxyPass /signserver/ ajp://127.0.0.1:8009/signserver/
+    ProxyPassReverse /signserver/ ajp://127.0.0.1:8009/signserver/
+
+    RewriteRule ^/?$ /signserver/ [R=302,L]
+{% endif %}
+</VirtualHost>
+</IfModule>

@@ -1,0 +1,14 @@
+---
+
+- name: Create PostgreSQL users
+  community.postgresql.postgresql_user:
+    name: "{{ item.name }}"
+    password: "{{ item.password }}"
+    login_unix_socket: "{{ postgresql_login_unix_socket }}"
+    login_user: postgres
+    state: present
+  become: true
+  become_user: postgres
+  loop: "{{ postgresql_users }}"
+  no_log: "{{ no_log_value }}"
+  tags: postgresql

@@ -1,0 +1,14 @@
+---
+
+- name: Update CA's to use Publishers using configdump
+  ansible.builtin.ommand: >
+    ./configdump.sh import 
+    --ignore-errors 
+    --overwrite update 
+    --non-interactive continue 
+    -l {{ ejbca_home }}/dump/addPubToCA 
+  args:
+    chdir: "{{ ejbca_home }}/dist/configdump"
+  become: true
+  become_user: "{{ ejbca_user }}"
+  

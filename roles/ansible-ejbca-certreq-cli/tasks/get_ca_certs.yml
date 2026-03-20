@@ -1,0 +1,83 @@
+---
+
+- name: Check if local directory {{ ejbca_cacrt_dir_output }} exists
+  ansible.builtin.stat:
+    path: "{{ ejbca_cacrt_dir_output }}"
+  delegate_to: localhost
+  become: false
+  register: ejbca_cacrt_dir_output_exists
+  changed_when: false
+
+- name: Create local directory for {{ ejbca_cacrt_dir_output }}
+  become: false
+  ansible.builtin.file:
+    path: "{{ ejbca_cacrt_dir_output }}"
+    state: directory
+  delegate_to: localhost
+  when: not ejbca_cacrt_dir_output_exists.stat.exists
+
+- name: Find what cert files are already downloaded
+  ansible.builtin.find:
+    path: "{{ ejbca_cacrt_dir_output }}"
+    file_type: file
+    recurse: yes
+    patterns: "*.crt"
+  delegate_to: localhost
+  become: false
+  register: find_local_ca_certs
+
+- name: Check if {{ item.caname }} chain file is already downloaded
+  ansible.builtin.stat:
+    path: "{% if item.fullchain is defined and item.fullchain is sameas true %}{{ ejbca_cacrt_dir_output }}/{{ item.caname }}-fullchain.crt{% else %}{{ ejbca_cacrt_dir_output }}/{{ item.caname }}.crt{% endif %}"
+  delegate_to: localhost
+  become: false
+  register: local_ca_chain_file_exists
+  changed_when: false
+
+- name: Export CA file
+  block:
+
+    - name: Get the {{ item.caname }} chain file
+      ansible.builtin.command: >
+        {{ ejbca_sh }} ca getcacert 
+        --caname {{ item.caname }}
+        {% if item.fullchain is defined and item.fullchain is sameas true %}
+        -f {{ identity_batch_output_dir }}/{{ item.caname }}-fullchain.crt
+        --include-full-chain 
+        {% else %}
+        -f {{ identity_batch_output_dir }}/{{ item.caname }}.crt
+        {% endif %}
+      become: true
+      become_user: "{{ ejbca_user }}"
+      register: ejbca_get_ca_chain
+      failed_when: ejbca_get_ca_chain.rc >= 2
+      changed_when: false
+      tags: ejbca-cli-cacert
+
+# TODO Add a when to only export if the certificate is not in the list?
+
+    - name: Copy {{ item.caname }} Chain file to Ansible controller
+      ansible.builtin.slurp:
+        src: "{% if item.fullchain is defined and item.fullchain is sameas true %}{{ identity_batch_output_dir }}/{{ item.caname }}-fullchain.crt{% else %}{{ identity_batch_output_dir }}/{{ item.caname }}.crt{% endif %}"
+      register: exported_ca_cert_file
+      no_log: true
+      tags: ejbca-cli-cacert
+
+    - name: Write {{ item.caname }} Chain file on Ansible controller
+      become: false
+      delegate_to: localhost
+      ansible.builtin.copy:
+        dest: "{% if item.fullchain is defined and item.fullchain is sameas true %}{{ ejbca_cacrt_dir_output }}/{{ item.caname }}-fullchain.crt{% else %}{{ ejbca_cacrt_dir_output }}/{{ item.caname }}.crt{% endif %}"
+        content: "{{ exported_ca_cert_file.content | b64decode }}"
+        mode: '0644'
+      tags: ejbca-cli-cacert
+
+    - name: Cleanup the {{ item.caname }} Chain files on remote host
+      ansible.builtin.file:
+        path: "{% if item.fullchain is defined and item.fullchain is sameas true %}{{ identity_batch_output_dir }}/{{ item.caname }}-fullchain.crt{% else %}{{ identity_batch_output_dir }}/{{ item.caname }}.crt{% endif %}"
+        state: absent
+      changed_when: false
+      tags: ejbca-cli-cacert
+  when:
+    - not ansible_check_mode
+    - not local_ca_chain_file_exists.stat.exists

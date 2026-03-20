@@ -1,0 +1,190 @@
+---
+
+- name: Check if HTTPD PEM certificate exists in batch output directory
+  ansible.builtin.stat:
+    path: "{{ identity_batch_output_dir }}/pem/{{ httpd_identity_info.id_name }}.pem"
+  register: httpd_tls_cert_exists_batch_dir
+  changed_when: false
+
+- name: Check if HTTPD PEM certificate exists in EJBCA p12 directory
+  ansible.builtin.stat:
+    path: "{{ ejbca_home }}/p12/pem/{{ httpd_identity_info.id_name }}.pem"
+  register: httpd_tls_cert_exists_p12_dir
+  changed_when: false
+
+- name: Set HTTPD PEM source directory
+  ansible.builtin.set_fact:
+    httpd_tls_source_dir: >-
+      {{
+        identity_batch_output_dir ~ '/pem'
+        if httpd_tls_cert_exists_batch_dir.stat.exists
+        else ejbca_home ~ '/p12/pem'
+      }}
+
+- name: Check if TLS Certificate file already exists in any supported source directory
+  ansible.builtin.stat:
+    path: "{{ identity_batch_output_dir }}/pem/{{ httpd_identity_info.id_name }}.pem"
+  register: tls_cert_exists
+  changed_when: false
+
+- name: Check if TLS Certificate file already exists in EJBCA p12 source directory
+  ansible.builtin.stat:
+    path: "{{ ejbca_home }}/p12/pem/{{ httpd_identity_info.id_name }}.pem"
+  register: tls_cert_exists_p12
+  changed_when: false
+
+- name: Create TLS certificate directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  loop:
+    - "{{ httpd_tls_cert_dir }}"
+    - "{{ httpd_tls_private_dir }}"
+
+- name: Ensure trusted CA bundle file exists
+  ansible.builtin.copy:
+    dest: "{{ httpd_trusted_ca_file }}"
+    content: ""
+    owner: root
+    group: root
+    mode: 0644
+    force: false
+
+- name: Role - Create Apache HTTPD TLS certificate
+  ansible.builtin.include_role:
+    name: ansible-ejbca-certreq-cli
+    tasks_from: batch_cert_request
+  loop: "{{ identity_info }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: "{{ no_log_value }}"
+  when: 
+    - identity_info[0] is defined
+    - not tls_cert_exists.stat.exists
+    - not tls_cert_exists_p12.stat.exists
+
+- name: Create the certstage directory
+  ansible.builtin.file:
+    path: /var/tmp/certstage
+    state: directory
+    owner: "{{ 'root' if ansible_check_mode else ejbca_user }}"
+    group: "{{ 'root' if ansible_check_mode else ejbca_group }}"
+  when:
+    - ansible_check_mode or (not tls_cert_exists.stat.exists and not tls_cert_exists_p12.stat.exists)
+
+- name: Export CA certificate chain to file using EJBCA CLI
+  ansible.builtin.command: >
+    {{ ejbca_sh }} ca getcacert 
+    --caname {{ item.caname }}
+    {% if item.fullchain is defined and item.fullchain is sameas true %}
+    -f /var/tmp/certstage/{{ item.caname }}-fullchain.crt
+    --include-full-chain 
+    {% else %}
+    -f /var/tmp/certstage/{{ item.caname }}.crt
+    {% endif %}
+  become: true
+  become_user: "{{ ejbca_user }}"
+  register: ejbca_get_ca_chain
+  failed_when: ejbca_get_ca_chain.rc >= 2
+  changed_when: ejbca_get_ca_chain.rc == 0
+  loop: "{{ httpd_trusted_cas }}"
+  loop_control:
+    label: "{{ item.caname }}"
+  tags: ejbca-cli-cacert
+  when: 
+    - not tls_cert_exists.stat.exists
+    - not tls_cert_exists_p12.stat.exists
+
+- name: Check exported CA chain files in certstage
+  ansible.builtin.stat:
+    path: "/var/tmp/certstage/{{ item.caname }}-fullchain.crt"
+  register: httpd_exported_ca_chain_files
+  loop: "{{ httpd_trusted_cas }}"
+  loop_control:
+    label: "{{ item.caname }}"
+  when: 
+    - not tls_cert_exists.stat.exists
+    - not tls_cert_exists_p12.stat.exists
+
+- name: Append exported CA chain files to the trusted-ca.crt file
+  ansible.builtin.shell: >
+    cat /var/tmp/certstage/{{ item.item.caname }}-fullchain.crt >> {{ httpd_trusted_ca_file }}
+  loop: "{{ httpd_exported_ca_chain_files.results }}"
+  loop_control:
+    label: "{{ item.item.caname }}"
+  when:
+    - not tls_cert_exists.stat.exists
+    - not tls_cert_exists_p12.stat.exists
+    - item.stat.exists
+
+- name: Cleanup the certstage directory
+  ansible.builtin.file:
+    path: /var/tmp/certstage
+    state: absent
+  when:
+    - ansible_check_mode or (not tls_cert_exists.stat.exists and not tls_cert_exists_p12.stat.exists)
+
+- name: Recheck HTTPD PEM certificate in batch output directory after generation
+  ansible.builtin.stat:
+    path: "{{ identity_batch_output_dir }}/pem/{{ httpd_identity_info.id_name }}.pem"
+  register: httpd_tls_cert_exists_batch_dir_after_generation
+  changed_when: false
+
+- name: Recheck HTTPD PEM certificate in EJBCA p12 directory after generation
+  ansible.builtin.stat:
+    path: "{{ ejbca_home }}/p12/pem/{{ httpd_identity_info.id_name }}.pem"
+  register: httpd_tls_cert_exists_p12_dir_after_generation
+  changed_when: false
+
+- name: Refresh HTTPD PEM source directory after certificate generation
+  ansible.builtin.set_fact:
+    httpd_tls_source_dir: >-
+      {{
+        identity_batch_output_dir ~ '/pem'
+        if httpd_tls_cert_exists_batch_dir_after_generation.stat.exists
+        else ejbca_home ~ '/p12/pem'
+      }}
+
+- name: Move certificate files to location for Apache HTTPD to use
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root 
+    group: root
+    mode: 0640
+    remote_src: yes
+  when:
+    - not ansible_check_mode
+  loop: 
+    - src: "{{ httpd_tls_source_dir }}/{{ httpd_identity_info.id_name }}.pem" 
+      dest: "{{ httpd_tls_cert_file }}"
+    - src: "{{ httpd_tls_source_dir }}/{{ httpd_identity_info.id_name }}-Key.pem"
+      dest: "{{ httpd_tls_key_file }}"
+    - src: "{{ httpd_tls_source_dir }}/{{ httpd_identity_info.id_name }}-CA.pem"
+      dest: "{{ httpd_tls_chain_file }}"
+  loop_control:
+    label: "{{ item.src }}"
+  tags: reverse-proxy
+  #when: 
+    #- not tls_cert_exists.stat.exists
+
+- name: Check trusted CA bundle after deploying Apache TLS files
+  ansible.builtin.stat:
+    path: "{{ httpd_trusted_ca_file }}"
+  register: httpd_trusted_ca_bundle
+  changed_when: false
+
+- name: Seed trusted CA bundle from the server chain when empty
+  ansible.builtin.copy:
+    src: "{{ httpd_tls_chain_file }}"
+    dest: "{{ httpd_trusted_ca_file }}"
+    owner: root
+    group: root
+    mode: 0644
+    remote_src: true
+  when:
+    - not ansible_check_mode
+    - not httpd_trusted_ca_bundle.stat.exists or httpd_trusted_ca_bundle.stat.size | int == 0

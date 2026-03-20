@@ -1,0 +1,10 @@
+---
+
+- name: Enable Only Inbound Peer Connections to this node
+  ansible.builtin.command: >
+    {{ ejbca_sh }} peer config 
+    --enable-in TRUE 
+    --enable-out FALSE
+  no_log: "{{ no_log_value }}"
+  become: true
+  become_user: "{{ ejbca_user }}"

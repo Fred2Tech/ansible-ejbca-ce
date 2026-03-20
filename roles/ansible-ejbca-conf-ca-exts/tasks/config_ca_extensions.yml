@@ -1,0 +1,237 @@
+---
+
+- block:
+    - name: Check the CRLPeriod for {{ item.caname }}
+      ansible.builtin.command: "{{ ejbca_sh }} ca getcafield {{ item.caname }} CRLPeriod"
+      args:
+        chdir: "{{ ejbca_home }}"
+      become_user: "{{ ejbca_user }}"
+      become: true
+      register: clrPeriod_check
+      until: clrPeriod_check.rc == 0
+      retries: 10
+      delay: 3
+      changed_when: item.crlPeriod|int != clrPeriod_check.stdout.split("'")[1]|int
+      when:
+        - item.crlPeriod is defined
+      no_log: "{{ no_log_value }}"
+
+    - name: Check the CRLOverlapTime for {{ item.caname }}
+      ansible.builtin.command: "{{ ejbca_sh }} ca getcafield {{ item.caname }} CRLOverlapTime"
+      args:
+        chdir: "{{ ejbca_home }}"
+      become_user: "{{ ejbca_user }}"
+      become: true
+      register: crlOverlapTime_check
+      until: crlOverlapTime_check.rc == 0
+      retries: 10
+      delay: 3
+      changed_when: item.crl_overlap_time|int != crlOverlapTime_check.stdout.split("'")[1]|int
+      when:
+        - item.crl_overlap_time is defined
+      no_log: "{{ no_log_value }}"
+
+    - name: Check the CRLIssueInterval for {{ item.caname }}
+      ansible.builtin.command: "{{ ejbca_sh }} ca getcafield {{ item.caname }} CRLIssueInterval"
+      args:
+        chdir: "{{ ejbca_home }}"
+      become_user: "{{ ejbca_user }}"
+      become: true
+      register: crlIssueInterval_check
+      until: crlIssueInterval_check.rc == 0
+      retries: 10
+      delay: 3
+      changed_when: item.crlIssueInterval|int != crlIssueInterval_check.stdout.split("'")[1]|int
+      when:
+        - item.crlIssueInterval is defined
+      no_log: "{{ no_log_value }}"
+
+    - name: Check the defaultCRLDistPoint for {{ item.caname }}
+      ansible.builtin.command: "{{ ejbca_sh }} ca getcafield {{ item.caname }} defaultCRLDistPoint"
+      args:
+        chdir: "{{ ejbca_home }}"
+      become_user: "{{ ejbca_user }}"
+      become: true
+      register: defaultCRLDistPoint_check
+      until: defaultCRLDistPoint_check.rc == 0
+      retries: 10
+      delay: 3
+      changed_when: item.defaultCRLDP|string not in defaultCRLDistPoint_check.stdout
+      when:
+        - item.defaultCRLDP is defined
+      no_log: "{{ no_log_value }}"
+
+    - name: Check the defaultOCSPServiceLocator for {{ item.caname }}
+      ansible.builtin.command: "{{ ejbca_sh }} ca getcafield {{ item.caname }} defaultOCSPServiceLocator"
+      args:
+        chdir: "{{ ejbca_home }}"
+      become_user: "{{ ejbca_user }}"
+      become: true
+      register: defaultOCSPServiceLocator_check
+      until: defaultOCSPServiceLocator_check.rc == 0
+      retries: 10
+      delay: 3
+      changed_when: item.defaultOCSPServiceLocator|string not in defaultOCSPServiceLocator_check.stdout
+      when:
+        - item.defaultOCSPServiceLocator is defined
+      no_log: "{{ no_log_value }}"
+
+    - name: Check the authorityInformationAccess for {{ item.caname }}
+      ansible.builtin.command: "{{ ejbca_sh }} ca getcafield {{ item.caname }} authorityInformationAccess"
+      args:
+        chdir: "{{ ejbca_home }}"
+      become_user: "{{ ejbca_user }}"
+      become: true
+      register: authorityInformationAccess_check
+      until: authorityInformationAccess_check.rc == 0
+      retries: 10
+      delay: 3
+      changed_when: item.authorityInformationAccess|string not in authorityInformationAccess_check.stdout
+      no_log: "{{ no_log_value }}"
+      when:
+        - item.authorityInformationAccess is defined
+
+    - name: Check the certificateAiaDefaultCaIssuerUri for {{ item.caname }}
+      ansible.builtin.command: "{{ ejbca_sh }} ca getcafield {{ item.caname }} certificateAiaDefaultCaIssuerUri"
+      args:
+        chdir: "{{ ejbca_home }}"
+      become_user: "{{ ejbca_user }}"
+      become: true
+      register: certificateAiaDefaultCaIssuerUri_check
+      until: certificateAiaDefaultCaIssuerUri_check.rc == 0
+      retries: 10
+      delay: 3
+      changed_when: item.certificateAiaDefaultCaIssuerUri|string not in certificateAiaDefaultCaIssuerUri_check.stdout
+      no_log: "{{ no_log_value }}"
+      when:
+        - item.certificateAiaDefaultCaIssuerUri is defined
+
+    - name: Check the useLdapDnOrder for {{ item.caname }}
+      ansible.builtin.command: "{{ ejbca_sh }} ca getcafield {{ item.caname }} useLdapDnOrder"
+      args:
+        chdir: "{{ ejbca_home }}"
+      become_user: "{{ ejbca_user }}"
+      become: true
+      register: useLdapDnOrder_check
+      until: useLdapDnOrder_check.rc == 0
+      retries: 10
+      delay: 3
+      changed_when: useLdapDnOrder_check.stdout.split("'")[1]|bool != item.useLdapDnOrder
+      when:
+        - item.useLdapDnOrder is defined
+      no_log: "{{ no_log_value }}"
+
+    - name: Check the Enforce Unique Distinguished Name for {{ item.caname }}
+      ansible.builtin.command: "{{ ejbca_sh }} ca getcafield {{ item.caname }} doEnforceUniqueDistinguishedName"
+      args:
+        chdir: "{{ ejbca_home }}"
+      become_user: "{{ ejbca_user }}"
+      become: true
+      register: doEnforceUniqueDistinguishedName_check
+      until: doEnforceUniqueDistinguishedName_check.rc == 0
+      retries: 10
+      delay: 3
+      changed_when: doEnforceUniqueDistinguishedName_check.stdout.split("'")[1]|bool != item.enforce_unique_dn
+      no_log: "{{ no_log_value }}"
+      when:
+        - item.enforce_unique_dn is defined
+
+    - name: Configure the CRLPeriod for {{ item.caname }}
+      ansible.builtin.command: "{{ ejbca_sh }} ca editca {{ item.caname }} CRLPeriod {{ item.crlPeriod }}"
+      args:
+        chdir: "{{ ejbca_home }}"
+      become_user: "{{ ejbca_user }}"
+      become: true
+      when:
+        - item.crlPeriod is defined
+        - clrPeriod_check.changed
+      no_log: "{{ no_log_value }}"
+
+    - name: Configure the CRLOverlapTime for {{ item.caname }}
+      ansible.builtin.command: "{{ ejbca_sh }} ca editca {{ item.caname }} CRLOverlapTime {{ item.crl_overlap_time }}"
+      args:
+        chdir: "{{ ejbca_home }}"
+      become_user: "{{ ejbca_user }}"
+      become: true
+      when:
+        - item.crl_overlap_time is defined
+        - crlOverlapTime_check.changed
+      no_log: "{{ no_log_value }}"
+
+    - name: Configure the CRLIssueInterval for {{ item.caname }}
+      ansible.builtin.command: "{{ ejbca_sh }} ca editca {{ item.caname }} CRLIssueInterval {{ item.crlIssueInterval }}"
+      args:
+        chdir: "{{ ejbca_home }}"
+      become_user: "{{ ejbca_user }}"
+      become: true
+      when:
+        - item.crlIssueInterval is defined
+        - crlIssueInterval_check.changed
+      no_log: "{{ no_log_value }}"
+
+    - name: Configure the defaultCRLDistPoint for {{ item.caname }}
+      ansible.builtin.command: "{{ ejbca_sh }} ca editca {{ item.caname }} defaultCRLDistPoint {{ item.defaultCRLDP }}"
+      args:
+        chdir: "{{ ejbca_home }}"
+      become_user: "{{ ejbca_user }}"
+      become: true
+      when:
+        - item.defaultCRLDP is defined
+        - defaultCRLDistPoint_check.changed
+      no_log: "{{ no_log_value }}"
+
+    - name: Configure the defaultOCSPServiceLocator for {{ item.caname }}
+      ansible.builtin.command: "{{ ejbca_sh }} ca editca {{ item.caname }} defaultOCSPServiceLocator {{ item.defaultOCSPServiceLocator }}"
+      args:
+        chdir: "{{ ejbca_home }}"
+      become_user: "{{ ejbca_user }}"
+      become: true
+      when:
+        - item.defaultOCSPServiceLocator is defined
+        - defaultOCSPServiceLocator_check.changed
+      no_log: "{{ no_log_value }}"
+
+    - name: Configure the authorityInformationAccess for {{ item.caname }}
+      ansible.builtin.command: "{{ ejbca_sh }} ca editca {{ item.caname }} authorityInformationAccess {{ item.authorityInformationAccess }}"
+      args:
+        chdir: "{{ ejbca_home }}"
+      become_user: "{{ ejbca_user }}"
+      become: true
+      when:
+        - item.authorityInformationAccess is defined
+        - authorityInformationAccess_check.changed
+      no_log: "{{ no_log_value }}"
+
+    - name: Configure the certificateAiaDefaultCaIssuerUri for {{ item.caname }}
+      ansible.builtin.command: "{{ ejbca_sh }} ca editca {{ item.caname }} certificateAiaDefaultCaIssuerUri {{ item.certificateAiaDefaultCaIssuerUri }}"
+      args:
+        chdir: "{{ ejbca_home }}"
+      become_user: "{{ ejbca_user }}"
+      become: true
+      when:
+        - item.certificateAiaDefaultCaIssuerUri is defined
+        - certificateAiaDefaultCaIssuerUri_check.changed
+      no_log: "{{ no_log_value }}"
+
+    - name: Configure the useLdapDnOrder for {{ item.caname }}
+      ansible.builtin.command: "{{ ejbca_sh }} ca editca {{ item.caname }} useLdapDnOrder {{ item.useLdapDnOrder| default('false') }}"
+      args:
+        chdir: "{{ ejbca_home }}"
+      become_user: "{{ ejbca_user }}"
+      become: true
+      when:
+        - useLdapDnOrder_check.changed
+      no_log: "{{ no_log_value }}"
+
+    - name: Configure the Enforce Unique Distinguished Name for {{ item.caname }}
+      ansible.builtin.command: "{{ ejbca_sh }} ca editca {{ item.caname }} doEnforceUniqueDistinguishedName {{ item.enforce_unique_dn| default('true') }}"
+      args:
+        chdir: "{{ ejbca_home }}"
+      become_user: "{{ ejbca_user }}"
+      become: true
+      when:
+        - item.enforce_unique_dn is defined
+        - doEnforceUniqueDistinguishedName_check.changed
+      no_log: "{{ no_log_value }}"
+  when:
+    - not ansible_check_mode

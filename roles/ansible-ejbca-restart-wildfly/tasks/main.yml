@@ -1,0 +1,66 @@
+---
+# tasks file for roles/ansible-ejbca-restart-wildfly
+
+- name: Gather WildFly service facts for check mode
+  ansible.builtin.service_facts:
+  when: ansible_check_mode
+
+- name: Restart application server if HSM keys were generated
+  block:
+  - name: Check if EJBCA EAR has a stale failed marker
+    ansible.builtin.stat:
+      path: "{{ wildfly_home }}/standalone/deployments/ejbca.ear.failed"
+    register: ejbca_failed_marker
+
+  - name: Remove stale failed marker for EJBCA EAR
+    ansible.builtin.file:
+      path: "{{ wildfly_home }}/standalone/deployments/ejbca.ear.failed"
+      state: absent
+    when:
+      - ejbca_failed_marker.stat.exists
+
+  - name: Request EJBCA EAR redeploy when recovering from a failed state
+    ansible.builtin.file:
+      path: "{{ wildfly_home }}/standalone/deployments/ejbca.ear.dodeploy"
+      state: touch
+      owner: "{{ ejbca_user }}"
+      group: "{{ ejbca_group }}"
+      mode: '0644'
+    when:
+      - ejbca_failed_marker.stat.exists
+
+  - name: Ensure application server is restarted
+    ansible.builtin.systemd:
+      state: restarted
+      name: wildfly
+    changed_when: false
+    when:
+      - wildfly_manage_service
+      - not ansible_check_mode or 'wildfly' in ansible_facts.services or 'wildfly.service' in ansible_facts.services
+
+  - name: Wait for EJBCA EAR file to start redeploying
+    ansible.builtin.wait_for:
+      path: "{{ wildfly_home }}/standalone/deployments/ejbca.ear.isdeploying"
+      state: present
+      delay: 10
+      timeout: 180
+    when:
+      - wildfly_manage_service
+      - not ansible_check_mode
+
+  - ansible.builtin.debug:
+      msg: "Automatic restart is disabled. Application server must be restarted for generated HSM keys to be available."
+    when: not wildfly_manage_service
+    failed_when: true
+  when: checking_existing_keys is defined and checking_existing_keys.changed or restart_wildfly is defined and restart_wildfly|bool
+
+- name: Ensure EJBCA EAR file is deployed
+  ansible.builtin.wait_for:
+    delay: 30
+    timeout: 180
+    path: "{{ wildfly_home }}/standalone/deployments/ejbca.ear.deployed"
+    state: present
+  when:
+    - checking_existing_keys is defined and checking_existing_keys.changed or restart_wildfly is defined and restart_wildfly|bool
+    - not ansible_check_mode
+  

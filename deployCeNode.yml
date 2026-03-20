@@ -1,0 +1,29 @@
+---
+
+# ansible-playbook -i inventory -l ceServers,pki01 deployCeNode.yml
+
+- hosts: pkiServers
+  become: true
+  become_method: sudo
+  pre_tasks:
+    - name: Ensure shared Ansible remote tmp exists
+      ansible.builtin.raw: install -d -m 1777 /var/tmp/.ansible /var/tmp/.ansible/tmp
+      check_mode: no
+      changed_when: false
+
+    - name: Refresh apt cache on Debian-family hosts
+      ansible.builtin.apt:
+        update_cache: true
+      when:
+        - ansible_facts['os_family'] == 'Debian'
+  roles:
+    - ansible-hostname
+    - role: ansible-role-mariadb
+      when: database_engine == 'mariadb'
+    - role: ansible-role-postgresql
+      when: database_engine == 'postgresql'
+    - ansible-ejbca-wildfly
+    - ansible-ejbca-pkc11-client
+    - ansible-ejbca-prep
+    - ansible-ejbca-deploy-pki-ce-sample
+    - ansible-pki-ss-httpd

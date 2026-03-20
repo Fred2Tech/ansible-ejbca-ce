@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CA Certificates and CRLs</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 2rem auto;
+      max-width: 60rem;
+      padding: 0 1rem;
+      color: #1f2933;
+      background: #f8fafc;
+    }
+    h1 {
+      margin-bottom: 0.5rem;
+    }
+    p {
+      line-height: 1.5;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #ffffff;
+      margin-top: 1.5rem;
+    }
+    th, td {
+      border-bottom: 1px solid #d9e2ec;
+      padding: 0.85rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #eef2f6;
+    }
+    a {
+      color: #0b69a3;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .note {
+      margin-top: 1.5rem;
+      padding: 1rem;
+      background: #ffffff;
+      border-left: 4px solid #0b69a3;
+    }
+  </style>
+</head>
+<body>
+  <h1>CA Certificates and CRLs</h1>
+  <p>Download links for the CA certificates and CRLs published by this EJBCA node.</p>
+
+  {% set ca_downloads = [] %}
+  {% for ca in management_add_certification_authorities | default([]) %}
+    {% set _ = ca_downloads.append({'name': ca.caname, 'dn': ca.dn}) %}
+  {% endfor %}
+  {% for ca in sub_add_certification_authorities | default([]) %}
+    {% set _ = ca_downloads.append({'name': ca.caname, 'dn': ca.dn}) %}
+  {% endfor %}
+
+  <table>
+    <thead>
+      <tr>
+        <th>CA</th>
+        <th>Certificate</th>
+        <th>CRL</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for ca in ca_downloads %}
+      <tr>
+        <td>{{ ca.name }}</td>
+        <td>
+          <a href="/ejbca/publicweb/webdist/certdist?cmd=cacert&amp;issuer={{ ca.dn | urlencode }}&amp;level=0">Download certificate</a>
+        </td>
+        <td>
+          <a href="/ejbca/publicweb/webdist/certdist?cmd=crl&amp;issuer={{ ca.dn | urlencode }}">Download CRL</a>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="note">
+    <p>SuperAdministrator PKCS#12 is not published over HTTP.</p>
+    <p>It is exported on the Ansible controller to: {{ superadmin_local_dir }}/{{ management_add_end_entities[0].username }}.p12</p>
+  </div>
+</body>
+</html>

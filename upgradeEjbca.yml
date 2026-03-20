@@ -1,0 +1,17 @@
+---
+
+# ansible-playbook -i inventory -l pki01 upgradeEjbca.yml
+
+- hosts: ceServers
+  become: yes
+  become_method: sudo
+  gather_facts: true
+  roles:
+    - ansible-ejbca-upgrade
+
+- hosts: ceServers[0]
+  become: yes
+  become_method: sudo
+  gather_facts: false
+  roles:
+    - ansible-ejbca-complete-upgrade

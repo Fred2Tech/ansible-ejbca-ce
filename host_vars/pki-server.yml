@@ -1,0 +1,25 @@
+---
+# Example host_vars for an EJBCA Community node.
+# Copy this file, rename it to match your inventory alias, and fill in real values.
+
+# SSH connection
+ansible_host: <PKI_SERVER_IP>
+ansible_user: "{{ lookup('env', 'PKI_ANSIBLE_USER') }}"
+ansible_ssh_private_key_file: ~/.ssh/ansible_pki
+
+# Remote group and EJBCA supplementary groups
+ansible_common_remote_group: "{{ lookup('env', 'PKI_REMOTE_GROUP') }}"
+ejbca_supplement_groups: "{{ lookup('env', 'PKI_REMOTE_GROUP') }},softhsm"
+
+# PKI server identity — must match the inventory alias
+pki_server_name: <pki-server>
+pki_domain_name: "{{ domain_name }}"
+pki_server_fqdn: "{{ pki_server_name }}.{{ pki_domain_name }}"
+organizationDomainName: "{{ pki_domain_name }}"
+hostname: "{{ pki_server_fqdn }}"
+
+# SoftHSM library path — uncomment the line matching the target OS family
+# Debian / Ubuntu:
+hsm_shared_library: /usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so
+# RedHat / AlmaLinux / Rocky:
+# hsm_shared_library: /usr/lib64/softhsm/libsofthsm2.so

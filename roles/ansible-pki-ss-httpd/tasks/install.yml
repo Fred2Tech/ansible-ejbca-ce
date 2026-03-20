@@ -1,0 +1,16 @@
+---
+
+- name: Install Apache HTTPD web server
+  ansible.builtin.package:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ httpd_packages }}"
+  tags: reverse-proxy
+  when: 
+    - (ansible_facts['distribution'] == "CentOS" ) or
+      (ansible_facts['distribution'] == "RedHat" ) or
+      (ansible_facts['distribution'] == "OracleLinux" ) or
+      (ansible_facts['distribution'] == "Rocky" ) or
+      (ansible_facts['distribution'] == "AlmaLinux" ) or
+      (ansible_facts['os_family'] == 'Debian')
+  

@@ -1,0 +1,6 @@
+---
+
+- name: Remove EJBCA 
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent

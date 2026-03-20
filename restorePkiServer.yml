@@ -1,0 +1,53 @@
+---
+# Community restore for the trimmed ansible_ejbca-ce copy.
+#
+# External remote database deployment requires two restore runs because the controller stores
+# one archive per host:
+# 1. Restore PostgreSQL on the remote DB host:
+# ansible-playbook -i inventory -l db01 -e "database_engine=postgresql restore_postgresql=true copy_restore_from_controller=true restore_server_file_path=serverBackups/db01.domain.local-11-03-2026.tgz" restorePkiServer.yml
+#
+# 2. Restore the EJBCA/WildFly/Apache node:
+# ansible-playbook -i inventory -l pki01 -e "database_engine=postgresql restore_ejbca_conf=true restore_httpd_conf=true restore_wildfly_conf=true restore_pkcs11_client=true copy_restore_from_controller=true restore_server_file_path=serverBackups/pki01.domain.local-11-03-2026.tgz" restorePkiServer.yml
+#
+# Optional remote fetch if a backupServer group is defined and stores the archive:
+# ansible-playbook -i inventory -l pki01,backupServer -e "restore_ejbca_conf=true restore_httpd_conf=true restore_wildfly_conf=true copy_restore_from_remote=true restore_server_file_path=~/backup/pki01.domain.local-11-03-2026.tgz" restorePkiServer.yml
+
+- hosts: backupServer
+  gather_facts: false
+  tasks:
+    - name: Download backup from remote server
+      block:
+        - name: Check if local directory {{ backup_dir_output }} exists
+          ansible.builtin.stat:
+            path: "{{ backup_dir_output }}"
+          register: backup_dir_output_exists
+          changed_when: false
+          tags: restore_backup
+
+        - name: Create local directory for {{ backup_dir_output }}
+          become: false
+          ansible.builtin.file:
+            path: "{{ backup_dir_output }}"
+            state: directory
+          delegate_to: localhost
+          tags: restore_backup
+          when:
+            - not backup_dir_output_exists.stat.exists
+
+        - name: Download backup archive to controller
+          ansible.builtin.fetch:
+            src: "{{ restore_server_file_path }}"
+            dest: "{{ backup_dir_output }}/"
+            flat: true
+          tags: restore_backup
+
+      when:
+        - copy_restore_from_remote is defined
+        - copy_restore_from_remote | bool
+
+- hosts: ceServers:mariadbServers:postgresqlServers
+  become: true
+  become_method: sudo
+  roles:
+    - ansible-hostname
+    - ansible-stage-backup-restore

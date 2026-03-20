@@ -1,0 +1,174 @@
+---
+# task file for wildfly
+
+- name: Remove RESTEasy-Crypto for Bouncy Castle Conflict 
+  ansible.builtin.template:
+    src: jaxrs-module.xml.j2.xml
+    dest: "{{ wildfly_home }}/modules/system/layers/base/org/jboss/as/jaxrs/main/module.xml"
+    owner: "{{ ejbca_user }}"
+    group: "{{ ejbca_group }}" 
+    force: yes
+
+- name: Remove RESTEasy-Crypto for Bouncy Castle Conflict 
+  ansible.builtin.file:
+    path: "{{ wildfly_home }}/modules/system/layers/base/org/jboss/resteasy/resteasy-crypto"
+    state: absent
+
+- name: Create /etc/wildfly directory
+  ansible.builtin.file:
+    path: "{{ wildfly_conf_dir }}"
+    state: directory
+    owner: "{{ ejbca_user }}"
+    group: "{{ ejbca_group }}"
+    mode: 0750
+
+- name: Copy wildfly.conf configuration
+  ansible.builtin.template:
+    src: wildfly.conf.j2
+    dest: "{{ wildfly_conf_dir }}/wildfly.conf"
+    owner: root
+    group: "{{ ejbca_group }}"
+    mode: 0640
+  notify:
+    - change standalone data mode
+
+- name: Create symlink to /etc/default/wildfly.conf
+  ansible.builtin.file:
+    state: link
+    src: "{{ wildfly_conf_dir }}/wildfly.conf"
+    dest: /etc/default/wildfly.conf
+
+#- name: Create symlink to upstream init script
+#  ansible.builtin.file:
+#    state: link
+#    src: "{{ wildfly_home }}/{{ wildfly_init_src_path }}/init.d/wildfly-init-{{ ansible_os_family | lower }}.sh"
+#    dest: "{{ wildfly_init_dir }}/wildfly"
+#  when: ansible_facts.service_mgr in ['init', 'upstart']
+#  notify:
+#    - change standalone data mode
+
+- name: Copy launch.sh to {{ wildfly_home }}/bin/
+  ansible.builtin.template:
+    src: launch.sh.j2
+    dest: "{{ wildfly_home }}/bin/launch.sh"
+    owner: "{{ ejbca_user }}"
+    group: "{{ ejbca_group }}"
+    mode: 0750
+  
+- name: Copy Wildfly standalone.conf file
+  ansible.builtin.template: 
+    src: standalone.conf.j2 
+    dest: "{{ wildfly_home }}/bin/standalone.conf"
+    owner: "{{ ejbca_user }}"
+    group: "{{ ejbca_group }}" 
+    mode: 0750
+  notify:
+  #  - restart wildfly
+    - change standalone data mode
+
+- ansible.builtin.meta: flush_handlers
+
+- name: Configure Wildfly systemd service
+  block:
+
+    - name: Copy wildfly systemd unit file
+      ansible.builtin.template: 
+        src: wildfly.service.j2 
+        dest: "{{ wildfly_systemd_dir }}/wildfly.service" 
+        owner: root
+        group: root 
+        mode: 0644  
+
+    - name: Enable the wildfly service
+      ansible.builtin.systemd_service:
+        name: wildfly
+        enabled: yes
+        daemon_reload: yes
+
+    - name: Stop the wildfly service
+      ansible.builtin.systemd_service:
+        name: wildfly
+        state: stopped
+      register: wildfly_stop_result
+      until: wildfly_stop_result is not failed
+      retries: 6
+      delay: 5
+
+  when: 
+    - ansible_facts.service_mgr == 'systemd'
+    - wildfly_manage_service| bool
+
+- name: Delete the wildfly tar file
+  ansible.builtin.file:
+    path: "{{ wildfly_download_dir }}/{{ wildfly_download_file }}"
+    state: absent
+  tags: cleanup
+  when: 
+    - wildfly_remove_download_file
+
+- name: find wildfly shell script files
+  ansible.builtin.find:
+    path: "{{ wildfly_home }}"
+    file_type: file
+    recurse: yes
+    patterns: "*.sh"
+  register: find_shell
+
+- name: Set permissions to 750 for the wildfly shell script files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    mode: 0750
+    owner: "{{ ejbca_user }}"
+    group: "{{ ejbca_group }}"
+  loop: "{{ find_shell.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: 
+    - item.mode != '0750'
+
+- name: find windows batch and powershell files
+  ansible.builtin.find:
+    path: "{{ wildfly_home }}"
+    file_type: file
+    recurse: yes
+    patterns: "*.bat,*.ps1"
+  register: find_win_files
+
+- name: Remove windows batch and powershell files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ find_win_files.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Remove wildfly files not needed
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ wildfly_remove_dirs }}"
+
+- name: Find text, conf, & properties
+  ansible.builtin.find:
+    path: "{{ wildfly_home }}"
+    file_type: file
+    recurse: yes
+    patterns: "*.text,*.conf,*.properties"
+  register: find_text_files
+
+- name: Set permissions to 660 for text, conf, & properties files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    mode: 0660
+    owner: "{{ ejbca_user }}"
+    group: "{{ ejbca_group }}"
+  loop: "{{ find_text_files.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Set permissions to 660 for jars and xml files
+  ansible.builtin.shell: "{{ item }}"
+  loop: "{{ wildfly_file_perms }}"
+  become: true
+  become_user: "{{ ejbca_user }}"
+  

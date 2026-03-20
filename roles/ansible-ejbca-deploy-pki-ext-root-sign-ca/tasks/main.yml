@@ -1,0 +1,23 @@
+---
+# tasks file for roles/ansible-ejbca-deploy-pki-ext-root-sign-ca
+
+- name: Convert DER encoded CSR to PEM
+  ansible.builtin.command: openssl req -inform DER -outform PEM -in {{ ejbca_csr_dir_output }}/{{ item.caname }}_csr.der -out {{ ejbca_csr_dir_output }}/{{ item.caname }}.csr
+  become: false
+  delegate_to: localhost
+  loop: "{{ add_certification_authorities }}"
+  loop_control:
+    label: "{{ item.caname }}"
+  no_log: "{{ no_log_value }}"
+    
+- name: Sign Subordinate CA CSR on EJBCA Root CA
+  ansible.builtin.include_role:
+    name: ansible-ejbca-certreq-cli
+    tasks_from: csr_cert_sign
+  loop: "{{ add_certification_authorities }}"
+  loop_control:
+    label: "{{ item.caname }}"
+  no_log: "{{ no_log_value }}"
+  when: 
+    - add_certification_authorities[0] is defined
+  

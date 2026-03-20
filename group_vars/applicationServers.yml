@@ -1,0 +1,32 @@
+---
+
+# Application server settings
+wildfly_version: 35.0.1.Final
+wildfly_checksum: sha256:45444ac28f33ee17101cf80b9eff7994f6fd0f2c8fbb4749627d9cec1cbdbc2e
+wildfly_standalone_file: standalone-35.xml.datasource.j2
+wildfly_use_galleon: true
+wildfly_galleon_version: 6.0.5
+wildfly_galleon_checksum: sha256:379dde080764d0e54fa96cee5b0ac2a5f2e3abe0823ca9dd9ab5ef36caf21188 # 6.0.5
+wildfly_jboss_client_checksum: sha256:bd724bcea8a3d0c89a027fb10c1be3e01eff5070b358583c6d19e491d3ebd43a # WF 35.0.1
+# Infinispan is required, disabling is not supported
+wildfly_disable_infinispan: false
+
+# Manage the service
+wildfly_manage_service: true
+
+# Elytron credential store
+wildfly_elytron_pass_dir: /opt/elytron
+wildfly_elytron_pass_file: "{{ wildfly_elytron_pass_dir }}/wildfly_pass"
+
+# Enable when FIPS mode is active
+wildfly_java_disable_sytem_props_file: false
+
+# Files to include in backup
+wildfly_files_backup:
+  - "{{ wildfly_conf_dir }}/wildfly.conf"
+  - "{{ wildfly_elytron_pass_file }}"
+
+# Kerberos files to include in backup
+wildfly_kerb_files_backup:
+  - "{{ wildfly_kerberos_file_path }}"
+  - "{{ wildfly_kerberos_keytab_file }}"

@@ -1,0 +1,239 @@
+---
+# tasks file for roles/ansible-ejbca-deploy-pki-ce-sample
+
+- name: Check deployment
+  ansible.builtin.include_role: 
+    name: ansible-ejbca-restart-wildfly
+  vars:
+    restart_wildfly: true
+  tags: check_deployment
+
+- name: Create certificate profile import dir
+  ansible.builtin.include_role: 
+    name: ansible-ejbca-ce-profile-mgmt
+    tasks_from: create_import_dir
+  vars:
+    profile_dir_structure: "{{ import_cp_dir_structure }}"
+    profile_import_list: "{{ import_cp_files }}"
+
+- name: Import certificate profiles
+  ansible.builtin.include_role: 
+    name: ansible-ejbca-ce-profile-mgmt
+    tasks_from: import_profiles
+  vars:
+    import_profile_dir: "{{ import_cp_dir_structure[0] }}"
+
+- name: Use CLI to create the Management & Root CA's
+  block:
+    
+    - name: Create crypto tokens for Management & Root CA's
+      ansible.builtin.include_role: 
+        name: ansible-ejbca-crypto-token
+        tasks_from: add_crypto_token
+      loop: "{{ management_add_certification_authorities }}"
+      no_log: "{{ no_log_value }}"
+
+    - name: Generate keys for Management & Root CA's on crypto token
+      ansible.builtin.include_role:
+        name: ansible-ejbca-crypto-token
+        tasks_from: generate_keys
+      loop: "{{ management_add_certification_authorities |subelements('crypto_token') }}"
+      loop_control:
+        label: "{{ key_item.0.caname }}"
+        loop_var: key_item
+      no_log: "{{ no_log_value }}"
+      tags: key_generation
+
+    - name: Initialize Management & Root CAs with CLI commands
+      ansible.builtin.include_role:
+        name: ansible-ejbca-init-ca
+        tasks_from: init_ca
+      loop: "{{ management_add_certification_authorities }}"
+      no_log: "{{ no_log_value }}"
+      tags: create_cas
+
+    - name: Configure ManagmentCA and Root CA settings
+      ansible.builtin.include_role: 
+        name: ansible-ejbca-conf-ca-exts
+        tasks_from: config_ca_extensions
+      loop: "{{ management_add_certification_authorities }}"
+      no_log: "{{ no_log_value }}"
+
+  when: 
+    - management_add_certification_authorities[0] is defined and not deploy_with_configdump|bool
+
+- name: Use CLI to create the Sub CA's
+  block:
+
+    - name: Create crypto token for Suborindated CA's not using PKCS11
+      ansible.builtin.include_role: 
+        name: ansible-ejbca-crypto-token
+        tasks_from: add_crypto_token
+      loop: "{{ sub_add_certification_authorities }}"
+      no_log: "{{ no_log_value }}"
+
+    - name: Generate keys for Suborindated CA's on crypto token
+      ansible.builtin.include_role:
+        name: ansible-ejbca-crypto-token
+        tasks_from: generate_keys
+      loop: "{{ sub_add_certification_authorities |subelements('crypto_token') }}"
+      loop_control:
+        label: "{{ key_item.0.caname }}"
+        loop_var: key_item
+      no_log: "{{ no_log_value }}"
+      tags: key_generation
+      
+    - name: Initialize Sub CA's with CLI commands
+      ansible.builtin.include_role:
+        name: ansible-ejbca-init-ca
+        tasks_from: init_ca
+      loop: "{{ sub_add_certification_authorities }}"
+      loop_control:
+        label: "{{ item.caname }}"
+      no_log: "{{ no_log_value }}"
+      tags: create_cas
+
+    - name: Configure Sub CA's settings
+      ansible.builtin.include_role: 
+        name: ansible-ejbca-conf-ca-exts
+        tasks_from: config_ca_extensions
+      loop: "{{ sub_add_certification_authorities }}"
+      no_log: "{{ no_log_value }}"
+
+  when: 
+    - sub_add_certification_authorities[0] is defined
+    - not deploy_with_configdump|bool
+
+- name: Create CRL Update Service
+  ansible.builtin.command: >
+    {{ ejbca_sh }} service create  
+    crlUpdate "workerClassPath=org.ejbca.core.model.services.workers.CRLUpdateWorker
+    worker.caidstocheck=1 intervalClassPath=org.ejbca.core.model.services.intervals.PeriodicalInterval
+    interval.periodical.unit=DAYS interval.periodical.value=1
+    actionClassPath=org.ejbca.core.model.services.actions.NoAction active=true"
+  args:
+    chdir: "{{ ejbca_home }}"
+  become_user: "{{ ejbca_user }}"
+  become: true
+  register: cli_crlservice_result
+  tags: cli-service
+  no_log: "{{ no_log_value }}"
+  failed_when: cli_crlservice_result.rc >= 2
+  changed_when: cli_crlservice_result.rc == 0
+  when:
+    - not ansible_check_mode
+
+- name: Read Public Access Role rules
+  ansible.builtin.command: >
+    {{ ejbca_sh }} roles listrules --role "Public Access Role"
+  args:
+    chdir: "{{ ejbca_home }}"
+  become_user: "{{ ejbca_user }}"
+  become: true
+  register: public_access_role_rules
+  changed_when: false
+  failed_when: public_access_role_rules.rc >= 2
+  when:
+    - not ansible_check_mode
+
+- name: Allow public RA access to CA certificates and CRLs
+  ansible.builtin.command: >
+    {{ ejbca_sh }} roles changerule
+    --name "Public Access Role"
+    --rule "/ca/{{ item.caname }}/"
+    --state ACCEPT
+  args:
+    chdir: "{{ ejbca_home }}"
+  become_user: "{{ ejbca_user }}"
+  become: true
+  loop: "{{ (management_add_certification_authorities | default([])) + (sub_add_certification_authorities | default([])) }}"
+  loop_control:
+    label: "{{ item.caname }}"
+  register: public_access_role_rule_updates
+  when:
+    - not ansible_check_mode
+    - item.caname is defined
+    - ('/ca/' ~ item.caname ~ '/ ALLOW') not in public_access_role_rules.stdout
+  failed_when: public_access_role_rule_updates.rc >= 2
+  changed_when: public_access_role_rule_updates.rc == 0
+
+- name: Configure EJBCA Enrollment protocols
+  ansible.builtin.include_role:
+    name: ansible-ejbca-enroll-protocols
+  when: 
+    - disable_ejbca_protocols[0] is defined or enable_ejbca_protocols[0] is defined
+
+- name: Add end entities
+  ansible.builtin.include_role:
+    name: ansible-ejbca-certreq-cli
+    tasks_from: batch_cert_request
+  loop: "{{ management_add_end_entities }}"
+  loop_control:
+    label: "{{ item.username }}"
+  when: 
+    - not ansible_check_mode
+    - management_add_end_entities[0] is defined
+
+- name: Add administrators
+  ansible.builtin.include_role:
+    name: ansible-ejbca-roles
+    tasks_from: add_to_role
+  loop: "{{ management_add_administrators }}"
+  loop_control:
+    label: "{{ item.match_value }}"
+  when: 
+    - not ansible_check_mode
+    - management_add_administrators[0] is defined
+
+- name: Create a Crontab to download CRL's for hosting on webserver
+  ansible.builtin.include_role:
+    name: ansible-ejbca-crl-crontab
+    tasks_from: config_crontab
+  when: 
+    - enable_crl_crontab|bool
+
+- name: Export CA certificates to local server
+  ansible.builtin.include_role:
+    name: ansible-ejbca-certreq-cli
+    tasks_from: get_ca_certs
+  loop: "{{ ejbca_ca_import }}"
+  loop_control:
+    label: "{{ item.caname }}"
+  when:
+    - not ansible_check_mode
+    - ejbca_ca_import[0] is defined
+
+- name: Ensure local superadmin export directory exists
+  ansible.builtin.file:
+    path: "{{ superadmin_local_dir | default('~/Desktop') }}"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  become: false
+  when:
+    - not ansible_check_mode
+    - management_add_end_entities[0] is defined
+
+- name: Read superadmin.p12 from remote host
+  ansible.builtin.slurp:
+    src: "{{ ejbca_home }}/p12/{{ item.username }}.p12"
+  loop: "{{ management_add_end_entities }}"
+  no_log: "{{ no_log_value }}"
+  register: exported_superadmin_p12
+  when:
+    - not ansible_check_mode
+    - management_add_end_entities[0] is defined
+
+- name: Write superadmin.p12 on Ansible controller
+  ansible.builtin.copy:
+    dest: "{{ superadmin_local_dir | default('~/Desktop') }}/{{ item.item.username }}.p12"
+    content: "{{ item.content | b64decode }}"
+    mode: '0600'
+  delegate_to: localhost
+  become: false
+  loop: "{{ exported_superadmin_p12.results | default([]) }}"
+  no_log: "{{ no_log_value }}"
+  register: copy_down_profile
+  when:
+    - not ansible_check_mode
+    - not (item.skipped | default(false))

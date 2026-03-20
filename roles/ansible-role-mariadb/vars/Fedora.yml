@@ -1,0 +1,17 @@
+# roles/mariadb/vars/Fedora.yml
+---
+
+mariadb_packages:
+  - MariaDB-client
+  - MariaDB-common
+  - MariaDB-server
+  - python3-PyMySQL
+
+mariadb_client_packages:
+  - python3-PyMySQL
+
+mariadb_srv_socket: "{{ mariadb_socket | default('/var/lib/mysql/mysql.sock') }}"
+
+mariadb_srv_config_network: "{{ mariadb_config_network | default('/etc/my.cnf.d/network.cnf') }}"
+mariadb_srv_config_server: "{{ mariadb_config_server | default('/etc/my.cnf.d/server.cnf') }}"
+mariadb_srv_config_custom: "{{ mariadb_config_custom | default('/etc/my.cnf.d/custom.cnf') }}"

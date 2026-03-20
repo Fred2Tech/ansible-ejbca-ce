@@ -1,0 +1,14 @@
+---
+# tasks file for ansible-ejbca-uninstall
+
+- name: Uninstall EJBCA 
+  ansible.builtin.include_tasks: uninstall_ejbca.yml
+
+- name: Uninstall Wildfly
+  ansible.builtin.include_tasks: uninstall_wildfly.yml
+
+- name: Uninstall PKCS11 client
+  ansible.builtin.include_tasks: uninstall_pkcs11_client.yml
+
+- name: Uninstall local database
+  ansible.builtin.include_tasks: uninstall_local_database.yml

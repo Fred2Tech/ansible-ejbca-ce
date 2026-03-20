@@ -1,0 +1,74 @@
+---
+
+- name: Create Apache HTTPD backup directory
+  ansible.builtin.file:
+    path: "{{ backup_dir_path_timestamp }}/apache"
+    state: directory
+    mode: 0755
+  tags: backup    
+
+- name: Backup TLS certificate, key, & chain.crt files
+  ansible.builtin.copy:
+    src: "{{ item.dest }}"
+    dest: "{{ backup_dir_path_timestamp }}/apache/{{ item.dest| basename }}"
+    remote_src: yes
+  loop: "{{ httpd_cert_files }}"
+  loop_control: 
+    label: "{{ item.dest }}"
+  register: tls_cert_key_backup_copy
+  tags: backup
+
+- name: Backup trusted-ca.crt file
+  ansible.builtin.copy:
+    src: "{{ httpd_trusted_ca_file }}"
+    dest: "{{ backup_dir_path_timestamp }}/apache/trusted-ca.crt"
+    remote_src: yes
+  register: trust_ca_backup_copy
+  tags: backup
+
+- name: Backup Apache HTTPD config files for CentOS/RedHat 8/9/10
+  ansible.builtin.copy:
+    src: "{{ item.dest }}"
+    dest: "{{ backup_dir_path_timestamp }}/apache/{{ item.dest| basename }}"
+    remote_src: yes
+  loop: "{{ httpd_conf_files_8 }}"
+  loop_control:
+    label: "{{ item.dest }}"
+  register: httpd_conf_backup_copy_8
+  tags: backup
+  when: 
+    - (ansible_facts['distribution'] == "CentOS" and ansible_facts['distribution_major_version'] == "8") or
+      (ansible_facts['distribution'] == "RedHat" and ansible_facts['distribution_major_version'] == "8") or
+      (ansible_facts['distribution'] == "RedHat" and (ansible_facts['distribution_major_version'] | int) >= 9) or
+      (ansible_facts['distribution'] == "OracleLinux" and ansible_facts['distribution_major_version'] == "8") or
+      (ansible_facts['distribution'] == "Rocky" and (ansible_facts['distribution_major_version'] | int) >= 8) or
+      (ansible_facts['distribution'] == "AlmaLinux" and ansible_facts['distribution_major_version'] == "8") or
+      (ansible_facts['distribution'] == "AlmaLinux" and (ansible_facts['distribution_major_version'] | int) >= 9) or
+      (ansible_facts['distribution'] == "OracleLinux" and (ansible_facts['distribution_major_version'] | int) >= 10)
+
+- name: Backup Apache HTTPD config files for CentOS/RedHat 7
+  ansible.builtin.copy:
+    src: "{{ item.dest }}"
+    dest: "{{ backup_dir_path_timestamp }}/apache/{{ item.dest| basename }}"
+    remote_src: yes
+  loop: "{{ httpd_conf_files_7 }}"
+  loop_control:
+    label: "{{ item.dest }}"
+  register: httpd_conf_backup_copy_7  
+  tags: backup
+  when: 
+    - (ansible_facts['distribution'] == "CentOS" and ansible_facts['distribution_major_version'] == "7") or
+      (ansible_facts['distribution'] == "RedHat" and ansible_facts['distribution_major_version'] == "7")       
+
+- name: Backup Apache HTTPD config files for Debian
+  ansible.builtin.copy:
+    src: "{{ item.dest }}"
+    dest: "{{ backup_dir_path_timestamp }}/apache/{{ item.dest| basename }}"
+    remote_src: yes
+  loop: "{{ httpd_conf_files_debian }}"
+  loop_control:
+    label: "{{ item.dest }}"
+  register: httpd_conf_backup_copy_debian
+  tags: backup
+  when:
+    - ansible_facts['os_family'] == 'Debian'

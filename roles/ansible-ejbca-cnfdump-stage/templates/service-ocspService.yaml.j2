@@ -1,0 +1,32 @@
+Object Type: Service
+Version: 1
+Name: validationAuthorityPubQueProSvc
+Worker Type: Publish Queue Process Service
+Worker Properties:
+  Time Before Expiring: 7
+  Time Unit: DAYS
+  Send to End Users: false
+  User E-mail Subject: ''
+  User E-mail Message: ''
+  Send to Admins: false
+  Admin E-mail Subject: ''
+  Admin E-mail Message: ''{% if ejbca_version is version('8.3.3', '>=') %}  
+  Max Number of Entries to Publish per Interval: 20000 {% endif %}  
+  Publishers to Check:
+{% if  ejbca_peerConnector is defined %}{% for item in ejbca_peerConnector %}{% if 'ocsp' == item.type %}
+  - validationAuthorityPeerPub-{{ item.name }}
+{% endif %}{% endfor %}{% endif %}
+Interval Type: Periodical Interval
+Interval Properties:
+  Periodical Value: 5
+  Periodical Unit: MINUTES
+Action Type: No Action
+Action Properties: {
+  }
+Description: ''
+Active: true
+Hidden: false
+Pin to Specific Nodes: [
+  ]
+Run on All Nodes: false
+

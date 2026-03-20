@@ -1,0 +1,72 @@
+---
+
+- name: Check if pg_dumpall utility is installed
+  ansible.builtin.stat:
+    path: "{{ postgresql_backup_cmd }}"
+  register: postgresql_dump_cmd_check
+  changed_when: false
+  tags: backup
+
+- name: Discover PostgreSQL cluster information
+  ansible.builtin.command: pg_lsclusters --no-header
+  register: postgresql_cluster_info
+  changed_when: false
+  tags: backup
+  when:
+    - postgresql_dump_cmd_check.stat.exists
+
+- name: Record PostgreSQL cluster facts
+  ansible.builtin.set_fact:
+    postgresql_conf_dir: "/etc/postgresql/{{ postgresql_cluster_info.stdout_lines[0].split()[0] }}/{{ postgresql_cluster_info.stdout_lines[0].split()[1] }}"
+  tags: backup
+  when:
+    - postgresql_dump_cmd_check.stat.exists
+
+- name: Backup the DB when pg_dumpall is found
+  block:
+    - name: Create PostgreSQL backup directory
+      ansible.builtin.file:
+        path: "{{ backup_dir_path_timestamp }}/postgresql"
+        state: directory
+        mode: 0755
+        owner: postgres
+        group: postgres
+      tags: backup
+
+    - name: Backup PostgreSQL cluster to a sql file
+      ansible.builtin.shell: |
+        {{ postgresql_backup_cmd }} --clean --if-exists > "{{ backup_dir_path_timestamp }}/postgresql/ejbca.sql"
+      become: true
+      become_user: postgres
+      tags: backup
+
+    - name: Wait until the PostgreSQL backup is completed
+      ansible.builtin.wait_for:
+        path: "{{ backup_dir_path_timestamp }}/postgresql/ejbca.sql"
+        state: present
+        msg: "Timeout to find file {{ backup_dir_path_timestamp }}/postgresql/ejbca.sql"
+      tags: backup
+
+    - name: Compress PostgreSQL sql file and remove the uncompressed file
+      community.general.archive:
+        path: "{{ backup_dir_path_timestamp }}/postgresql/ejbca.sql"
+        dest: "{{ backup_dir_path_timestamp }}/postgresql/ejbca.sql.tar.gz"
+        format: gz
+        force_archive: true
+        remove: true
+      tags: backup
+
+  when:
+    - postgresql_dump_cmd_check.stat.exists
+
+- name: Backup PostgreSQL configuration files
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ backup_dir_path_timestamp }}/postgresql/{{ item | basename }}"
+    remote_src: true
+  loop:
+    - "{{ postgresql_conf_dir }}/postgresql.conf"
+    - "{{ postgresql_conf_dir }}/pg_hba.conf"
+  tags: backup
+  when:
+    - postgresql_dump_cmd_check.stat.exists

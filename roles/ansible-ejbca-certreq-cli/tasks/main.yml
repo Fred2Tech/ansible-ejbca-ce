@@ -1,0 +1,67 @@
+---
+# tasks file for ansible-ejbca-certreq-cli
+
+- name: Check if local directory {{ ejbca_csr_dir_output }} exists
+  ansible.builtin.stat:
+    path: "{{ ejbca_csr_dir_output }}"
+  register: ejbca_csr_dir_output_exists
+  changed_when: false
+
+- name: Create local directory for {{ ejbca_csr_dir_output }}
+  become: false
+  ansible.builtin.file:
+    path: "{{ ejbca_csr_dir_output }}"
+    state: directory
+  delegate_to: localhost
+  when: 
+    - not ejbca_csr_dir_output_exists.stat.exists
+
+- name: Create End Entities batch style 
+  ansible.builtin.include_tasks: batch_cert_request.yml
+  loop: "{{ identity_info }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: "{{ no_log_value }}"
+  when: 
+    - not ansible_check_mode
+    - identity_info[0] is defined
+
+- name: Sign CSR End Entities
+  ansible.builtin.include_tasks: csr_cert_sign.yml
+  loop: "{{ identity_csr_info }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: "{{ no_log_value }}"
+  when: 
+    - not ansible_check_mode
+    - identity_csr_info[0] is defined
+
+- name: Download CA Certs for Trustchain file for HTTPD
+  ansible.builtin.include_tasks: get_ca_certs.yml
+  loop: "{{ httpd_trusted_cas }}"
+  loop_control:
+    label: "{{ item.caname }}"
+  when: 
+    - not ansible_check_mode
+    - httpd_trusted_cas[0] is defined
+
+- name: Download CA Cert files that get imported into External RA/VA 
+  ansible.builtin.include_tasks: get_ca_certs.yml
+  loop: "{{ ejbca_ca_import }}"
+  loop_control:
+    label: "{{ item.caname }}"
+  when: 
+    - not ansible_check_mode
+    - ejbca_ca_import[0] is defined
+
+- name: Download CA Cert chain file for SignServer Signers
+  ansible.builtin.include_tasks: get_ca_certs.yml
+  loop: "{{ identity_csr_info }}"
+  loop_control:
+    label: "{{ item.caname }}"
+  when: 
+    - not ansible_check_mode
+    - identity_csr_info[0] is defined
+    - item.fullchain is defined
+    - item.fullchain|bool   
+    

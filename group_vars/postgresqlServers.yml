@@ -1,0 +1,31 @@
+---
+
+# PostgreSQL settings for a dedicated remote database host.
+postgresql_install_server: true
+postgresql_install_client: false
+postgresql_service: postgresql
+postgresql_port: 5432
+postgresql_listen_addresses: '*'
+postgresql_databases:
+  - name: "{{ database_name }}"
+    owner: "{{ database_user }}"
+    encoding: UTF8
+postgresql_users:
+  - name: "{{ database_user }}"
+    password: "{{ database_password }}"
+    db: "{{ database_name }}"
+    priv: ALL
+postgresql_allowed_cidrs: >-
+  {{
+    ['127.0.0.1/32', '::1/128']
+    + (
+      (groups['ceServers'] | default([]))
+      | map('extract', hostvars, 'ansible_host')
+      | map('regex_replace', '$', '/32')
+      | list
+    )
+  }}
+
+# PostgreSQL JDBC driver for EJBCA
+ejbca_jdbc_driver: "{{ postgresql_jdbc_driver }}"
+ejbca_jdbc_driver_checksum: "{{ postgresql_jdbc_driver_checksum }}"

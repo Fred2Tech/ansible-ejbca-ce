@@ -1,0 +1,9 @@
+---
+- hosts: ceServers
+  become: true
+  become_method: sudo
+  tasks:
+    - name: Apply Apache HTTPD configuration updates
+      ansible.builtin.import_role:
+        name: ansible-pki-ss-httpd
+        tasks_from: configure

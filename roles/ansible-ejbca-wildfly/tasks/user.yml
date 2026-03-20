@@ -1,0 +1,22 @@
+---
+
+- name: Create EJBCA group - {{ ejbca_group }}
+  ansible.builtin.group:
+    name: "{{ ejbca_group }}"
+    state: present
+
+- name: Ensure supplemental groups for {{ ejbca_user }} exist
+  ansible.builtin.group:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ (ejbca_supplement_groups | default('')) | split(',') | map('trim') | reject('equalto', '') | list }}"
+
+- name: Create EJBCA user - {{ ejbca_user }} 
+  ansible.builtin.user:
+    name: "{{ ejbca_user }}"
+    group: "{{ ejbca_group }}"
+    groups: "{{ ejbca_supplement_groups | default('') }}"
+    home: "{{ ejbca_user_home_path | default('/home/wildfly') }}"
+    createhome: yes
+    #shell: "{{ wildfly_user_shell |default(omit) }}"
+    state: present

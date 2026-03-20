@@ -1,0 +1,33 @@
+---
+
+- name: Install PostgreSQL packages on Debian
+  ansible.builtin.package:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ postgresql_packages }}"
+  tags: postgresql
+  when:
+    - ansible_facts['os_family'] == 'Debian'
+
+- name: Install PostgreSQL packages on RedHat
+  ansible.builtin.package:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ postgresql_packages }}"
+  tags: postgresql
+  when:
+    - ansible_facts['os_family'] == 'RedHat'
+
+- name: Check whether PostgreSQL cluster is initialized on RedHat
+  ansible.builtin.stat:
+    path: "{{ postgresql_data_dir }}/PG_VERSION"
+  register: postgresql_redhat_cluster
+  when:
+    - ansible_facts['os_family'] == 'RedHat'
+
+- name: Initialize PostgreSQL cluster on RedHat
+  ansible.builtin.command: "{{ postgresql_initdb_command }}"
+  when:
+    - ansible_facts['os_family'] == 'RedHat'
+    - postgresql_redhat_cluster is defined
+    - not postgresql_redhat_cluster.stat.exists

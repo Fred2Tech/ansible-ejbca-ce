@@ -1,0 +1,240 @@
+---
+# Set the default Python interpreter
+#ansible_python_interpreter: /usr/bin/python3
+
+ansible_managed: This file is managed by Ansible.
+ansible_ssh_pipelining: true
+no_log_value: true
+
+# Use scripts/with-env.sh to load .env variables
+pki_env_domain_name: "{{ lookup('ansible.builtin.env', 'PKI_DOMAIN_NAME') | default('fenetre2000.local', true) }}"
+pki_env_database_name: "{{ lookup('ansible.builtin.env', 'PKI_DATABASE_NAME') | default('ejbca', true) }}"
+pki_env_organization_name: "{{ lookup('ansible.builtin.env', 'PKI_ORGANIZATION_NAME') | default('Fenetre2000', true) }}"
+pki_env_organization_short_name: "{{ lookup('ansible.builtin.env', 'PKI_ORGANIZATION_SHORT_NAME') | default(pki_env_organization_name, true) }}"
+pki_env_organization_crl_name: "{{ lookup('ansible.builtin.env', 'PKI_ORGANIZATION_CRL_NAME') | default(pki_env_organization_name, true) }}"
+pki_env_country_name: "{{ lookup('ansible.builtin.env', 'PKI_COUNTRY_NAME') | default('BE', true) }}"
+pki_env_management_ca_name: "{{ lookup('ansible.builtin.env', 'PKI_MANAGEMENT_CA_NAME') | default('ManagementCA', true) }}"
+pki_env_root_ca_name: "{{ lookup('ansible.builtin.env', 'PKI_ROOT_CA_NAME') | default(pki_env_organization_short_name ~ '-Root-CA', true) }}"
+pki_env_sub_ca_name: "{{ lookup('ansible.builtin.env', 'PKI_SUB_CA_NAME') | default(pki_env_organization_short_name ~ '-Sub-CA', true) }}"
+pki_env_superadmin_cn: "{{ lookup('ansible.builtin.env', 'PKI_SUPERADMIN_CN') | default(pki_env_organization_name ~ '-Keyfactor-SA', true) }}"
+pki_env_healthcheck_authorized_ips_csv: "{{ lookup('ansible.builtin.env', 'PKI_HEALTHCHECK_AUTHORIZED_IPS') | default('127.0.0.1,::1,0:0:0:0:0:0:0:1,192.168.59.153', true) }}"
+pki_env_remote_user: "{{ lookup('ansible.builtin.env', 'PKI_ANSIBLE_USER') | default('fenetre2000', true) }}"
+pki_env_remote_group: "{{ lookup('ansible.builtin.env', 'PKI_REMOTE_GROUP') | default('fenetre2000', true) }}"
+pki_env_supplement_groups: "{{ lookup('ansible.builtin.env', 'PKI_SUPPLEMENT_GROUPS') | default('fenetre2000,softhsm', true) }}"
+pki_env_app_user: "{{ lookup('ansible.builtin.env', 'PKI_APP_USER') | default('wildfly', true) }}"
+pki_env_app_group: "{{ lookup('ansible.builtin.env', 'PKI_APP_GROUP') | default('wildfly', true) }}"
+pki_env_default_secret_value: "{{ lookup('ansible.builtin.env', 'PKI_DEFAULT_SECRET_VALUE') | default('foo123', true) }}"
+pki_env_database_user: "{{ lookup('ansible.builtin.env', 'PKI_DATABASE_USER') | default('ejbca-usr', true) }}"
+pki_env_database_password: "{{ lookup('ansible.builtin.env', 'PKI_DATABASE_PASSWORD') | default('ejbca', true) }}"
+pki_env_database_root_password: "{{ lookup('ansible.builtin.env', 'PKI_DATABASE_ROOT_PASSWORD') | default('PrimeKeyPkI4all', true) }}"
+pki_env_ejbca_cli_password: "{{ lookup('ansible.builtin.env', 'PKI_EJBCA_CLI_PASSWORD') | default('ejbca', true) }}"
+pki_env_ejbca_cms_keystore_password: "{{ lookup('ansible.builtin.env', 'PKI_EJBCA_CMS_KEYSTORE_PASSWORD') | default('ejbca', true) }}"
+pki_env_httpd_identity_password: "{{ lookup('ansible.builtin.env', 'PKI_HTTPD_IDENTITY_PASSWORD') | default(pki_env_default_secret_value, true) }}"
+pki_env_superadmin_enrollment_code: "{{ lookup('ansible.builtin.env', 'PKI_SUPERADMIN_ENROLLMENT_CODE') | default(pki_env_default_secret_value, true) }}"
+pki_env_mgmtca_token_pin: "{{ lookup('ansible.builtin.env', 'PKI_MGMTCA_TOKEN_PIN') | default(pki_env_default_secret_value, true) }}"
+pki_env_rootca_token_pin: "{{ lookup('ansible.builtin.env', 'PKI_ROOTCA_TOKEN_PIN') | default(pki_env_default_secret_value, true) }}"
+pki_env_subca_token_pin: "{{ lookup('ansible.builtin.env', 'PKI_SUBCA_TOKEN_PIN') | default(pki_env_default_secret_value, true) }}"
+
+default_secret_value: "{{ pki_env_default_secret_value }}"
+domain_name: "{{ pki_env_domain_name }}"
+ansible_user: "{{ pki_env_remote_user }}"
+ansible_common_remote_group: "{{ pki_env_remote_group }}"
+ejbca_supplement_groups: "{{ pki_env_supplement_groups }}"
+
+# Database backend selection for EJBCA CE.
+# Supported engines in this trimmed copy are `mariadb` and `postgresql`.
+# `database_deployment_mode=local` installs the database on the application node.
+# `database_deployment_mode=remote` expects a dedicated host in the matching DB group.
+database_engine: postgresql
+database_deployment_mode: remote
+database_server_group: "{{ 'postgresqlServers' if database_engine == 'postgresql' else 'mariadbServers' }}"
+database_connection_type: "{{ 'postgresql' if database_engine == 'postgresql' else 'mariadb' }}"
+database_driver_class: "{{ 'org.postgresql.Driver' if database_engine == 'postgresql' else 'org.mariadb.jdbc.Driver' }}"
+database_jar_filename: "{{ 'postgresql.jar' if database_engine == 'postgresql' else 'mariadb-java-client.jar' }}"
+database_port: "{{ 5432 if database_engine == 'postgresql' else 3306 }}"
+database_name: "{{ pki_env_database_name }}"
+database_user: "{{ pki_env_database_user }}"
+database_password: "{{ encrypted_database_ejbcauser_password | default(pki_env_database_password, true) }}"
+database_server_inventory_name: >-
+  {{
+    inventory_hostname
+    if database_deployment_mode == 'local'
+    else ((groups[database_server_group] | default([]) | first) | default(inventory_hostname))
+  }}
+database_host: >-
+  {{
+    '127.0.0.1'
+    if database_deployment_mode == 'local'
+    else (hostvars[database_server_inventory_name].ansible_host | default(database_server_inventory_name))
+  }}
+database_backup_host: "{{ database_host }}"
+
+mariadb_install_server: "{{ database_engine == 'mariadb' and database_deployment_mode == 'local' }}"
+mariadb_install_client: "{{ database_engine == 'mariadb' and database_deployment_mode == 'remote' }}"
+mariadb_root_password: "{{ encrypted_database_rootuser_password | default(pki_env_database_root_password, true) }}"
+mariadb_databases:
+  - name: "{{ database_name }}"
+    collation: utf8mb4_unicode_520_ci
+    encoding: utf8mb4
+mariadb_users:
+  - name: "{{ database_user }}"
+    password: "{{ database_password }}"
+    priv: "{{ database_name }}.*:ALL"
+    host: "%"
+  - name: "{{ database_user }}"
+    password: "{{ database_password }}"
+    priv: "{{ database_name }}.*:ALL"
+    host: localhost
+mariadb_backup_user: root
+mariadb_backup_user_password: "{{ mariadb_root_password }}"
+mariadb_backup_cmd: /usr/bin/mariadb-dump
+mariadb_cmd: /usr/bin/mariadb
+postgresql_install_server: "{{ database_engine == 'postgresql' and database_deployment_mode == 'local' }}"
+postgresql_install_client: "{{ database_engine == 'postgresql' and database_deployment_mode == 'remote' }}"
+postgresql_service: postgresql
+postgresql_listen_addresses: "{{ '127.0.0.1' if database_deployment_mode == 'local' else '*' }}"
+postgresql_databases:
+  - name: "{{ database_name }}"
+    owner: "{{ database_user }}"
+    encoding: UTF8
+postgresql_users:
+  - name: "{{ database_user }}"
+    password: "{{ database_password }}"
+    db: "{{ database_name }}"
+    priv: ALL
+postgresql_allowed_cidrs: >-
+  {{
+    ['127.0.0.1/32', '::1/128']
+    + (
+      (groups['ceServers'] | default([]))
+      | map('extract', hostvars, 'ansible_host')
+      | map('regex_replace', '$', '/32')
+      | list
+    )
+  }}
+
+# Organisation and domain variables
+organizationName: "{{ pki_env_organization_name }}"
+organizationNameShort: "{{ pki_env_organization_short_name }}"
+organizationNameCRL: "{{ pki_env_organization_crl_name }}"
+organizationDomainName: "{{ domain_name }}"
+countryName: "{{ pki_env_country_name }}"
+management_ca_name: "{{ management_ca_name_override | default(pki_env_management_ca_name, true) }}"
+root_ca_name: "{{ pki_env_root_ca_name }}"
+sub_ca_name: "{{ pki_env_sub_ca_name }}"
+management_ca_dn: "{{ management_ca_dn_override | default('CN=' ~ management_ca_name ~ ',OU=Certification Authorities,O=' ~ organizationName ~ ',C=' ~ countryName) }}"
+management_ca_certprofile: "{{ management_ca_certprofile_override | default('managementCA') }}"
+management_ca_signsrv_issuerdn: "CN={{ management_ca_name }},OU=Certification Authorities,OU={{ organizationName }},O={{ organizationName }}"
+management_ca_export_filename: "{{ management_ca_name | lower }}.crt"
+superAdminCn: "{{ pki_env_superadmin_cn }}"
+sharedVarsLocation: ~/ansible/ansibleCacheDir
+
+# Deployment locations for all the servers
+ejbca_root_dir: /opt
+ejbca_src_link_dir: "{{ ejbca_root_dir }}/ejbca"
+ejbca_home: "{{ ejbca_root_dir }}/ejbca"
+ejbca_sh: "{{ ejbca_home }}/bin/ejbca.sh"
+signsrv_root_dir: /opt
+signsrv_home: "{{ signsrv_root_dir }}/signsrv"
+wildfly_install_dir: /opt
+wildfly_home: "{{ wildfly_install_dir }}/wildfly"
+ejbca_group: "{{ pki_env_app_group }}"
+ejbca_user: "{{ pki_env_app_user }}"
+# Additional groups for the application user
+#ejbca_supplement_groups: hsmusers
+# Override application user home directory
+ejbca_user_home_path: "/home/{{ ejbca_user }}"
+signsrv_group: "{{ pki_env_app_group }}"
+signsrv_user: "{{ pki_env_app_user }}"
+identity_batch_output_dir: /var/tmp
+
+# Application user management
+ejbca_manage_user: true 
+signsrv_manage_user: true
+signsrv_user_profile: "/home/{{ signsrv_user }}"
+
+# Directories to store files on Ansible controller
+ejbca_crl_dir_output: "{{ playbook_dir }}/ejbcaCRLs"
+ejbca_cacrt_dir_output: "{{ playbook_dir }}/ejbcaCaCerts"
+ejbca_csr_dir_output: "{{ playbook_dir }}/ejbcaCSR"
+superadmin_local_dir: "{{ ejbca_cacrt_dir_output }}"
+
+# Create and fetch TLS certificate for this node
+create_root_tls_cert: true
+
+# Peer certificate serial number cache
+peer_ca_cert_serial_numbers: "{{ lookup('file', '~/ansible/ansibleCacheDir/peer_cert_serial_numbers.yml', errors='ignore' ) | from_yaml }}"
+ra_peer_cert_serial_numbers: "{{ lookup('file', '{{ ejbca_csr_dir_output }}/ra_peer_cert_serial_numbers.yml', errors='ignore' ) | from_yaml }}"
+
+# CLI and token credentials
+ejbca_conf_cli_default_password: "{{ encrypted_ejbca_cli_password | default(pki_env_ejbca_cli_password, true) }}"
+ejbca_conf_ca_cmskeystorepass: "{{ encrypted_ejbca_conf_ca_cmskeystorepass | default(pki_env_ejbca_cms_keystore_password, true) }}"
+
+httpd_identity_password: "{{ encrypted_httpd_identity_password | default(pki_env_httpd_identity_password, true) }}"
+superadmin_enrollment_code: "{{ encrypted_superadmin_enrollment_code | default(pki_env_superadmin_enrollment_code, true) }}"
+mgmtca_token_pin: "{{ encrypted_mgmtca_token_pin | default(pki_env_mgmtca_token_pin, true) }}"
+rootca_token_pin: "{{ encrypted_rootca_token_pin | default(pki_env_rootca_token_pin, true) }}"
+subca_token_pin: "{{ encrypted_subca_token_pin | default(pki_env_subca_token_pin, true) }}"
+
+# Authorized IPs for healthcheck
+healthcheck_authorized_ips: "{{ pki_env_healthcheck_authorized_ips_csv.split(',') | map('regex_replace', '^\\s+|\\s+$', '') | reject('equalto', '') | list }}"
+
+ejbca_conf_healtcheck_authorizedips: "{{ healthcheck_authorized_ips | join(';') }}"
+ss_conf_healtcheck_authorizedips: "{{ healthcheck_authorized_ips | join(';') }}"
+
+# Location to write the CRL files on server
+ejbca_crl_dir_enabled: false
+ejbca_crl_dir:
+  - /opt/web/CRLs
+  - /opt/web/AIA
+
+# Apache Ant
+apache_ant_remote_dir: ~/Downloads/PK-Software/apache-ant-1.10.15-bin.tar.gz
+ant_version: apache-ant-1.10.15-bin.tar.gz
+ant_url: "https://mirror.olnevhost.net/pub/apache/ant/binaries/{{ ant_version }}" 
+ant_checksum: sha256:71334d7e5d98cfe53d6c429a648a5021137a967378667306c5f613dff5180506
+
+# MariaDB JDBC driver
+mariadb_jdbc_driver: https://dlm.mariadb.com/4174416/Connectors/java/connector-java-3.5.2/mariadb-java-client-3.5.2.jar
+mariadb_jdbc_driver_checksum: sha256:f2f3c3c1a3bdaca69dd1d4e1cd8aed075242fc72ae41463ddb82e367b388f6ad
+
+# PostgreSQL JDBC driver
+postgresql_jdbc_driver: https://jdbc.postgresql.org/download/postgresql-42.7.5.jar
+postgresql_jdbc_driver_checksum: ""
+
+ejbca_jdbc_driver: "{{ postgresql_jdbc_driver if database_engine == 'postgresql' else mariadb_jdbc_driver }}"
+ejbca_jdbc_driver_checksum: "{{ postgresql_jdbc_driver_checksum if database_engine == 'postgresql' else mariadb_jdbc_driver_checksum }}"
+
+# Local JDBC driver path
+ejbca_jdbc_remote_dir: ~/Downloads/PK-Software/mariadb-java-client-3.1.4.jar
+ejbca_jdbc_gen_name: "{{ appsrv_datasources[0].database_jar_filename }}"
+
+# CA chains for HTTPD client auth
+httpd_trusted_cas:
+  - caname: "{{ management_ca_name }}"
+    fullchain: true
+  - caname: "{{ sub_ca_name }}"
+    fullchain: true
+
+# CAs to export and import on external nodes
+ejbca_ca_import:
+  - caname: "{{ management_ca_name }}"
+    superadmincn: "{{ superAdminCn }}"
+    fullchain: false
+  - caname: "{{ sub_ca_name }}"
+    fullchain: false
+  - caname: "{{ root_ca_name }}"
+    fullchain: false
+
+# Serial number bit size
+#ejbca_bits_in_serial_number: 
+
+# Suppress CLI informational output
+ejbca_cli_log_fix: false
+
+# Backup output directory
+backup_dir_output: "{{ playbook_dir }}/serverBackups"
+# Backup directory on remote host
+backup_dir_path: /var/tmp
+# Recompile EAR on restore
+restore_recompile_ejbca_ear: false

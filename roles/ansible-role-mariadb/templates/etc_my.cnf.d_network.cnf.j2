@@ -1,0 +1,13 @@
+{{ ansible_managed | comment }}
+# Mariadb network settings
+#
+#
+
+[mysqld]
+bind_address={{ mariadb_bind_address }}
+datadir={{ mariadb_datadir| default('/var/lib/mysql') }}
+socket={{ mariadb_srv_socket }}
+
+[client]
+port={{ mariadb_netwokr_port | default('3306') }}
+socket={{ mariadb_srv_socket }}

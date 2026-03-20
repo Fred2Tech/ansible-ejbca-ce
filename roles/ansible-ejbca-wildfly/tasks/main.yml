@@ -1,0 +1,17 @@
+---
+# task file for wildfly
+
+- name: Task - Download Wildfly {{ wildfly_version }} and install software
+  ansible.builtin.include_tasks: install.yml
+
+- name: Skip WildFly configuration during check mode when installation is absent
+  ansible.builtin.debug:
+    msg: "Skipping WildFly configuration in check mode because the WildFly installation is not present yet."
+  when:
+    - not wildfly_src_dir.stat.exists
+    - ansible_check_mode
+
+- name: Task - Configure Wildfly {{ wildfly_version }}
+  ansible.builtin.include_tasks: configure.yml
+  when:
+    - not ansible_check_mode

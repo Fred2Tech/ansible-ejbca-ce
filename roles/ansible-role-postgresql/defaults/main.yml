@@ -1,0 +1,17 @@
+---
+
+postgresql_install_server: false
+postgresql_install_client: false
+postgresql_service: postgresql
+postgresql_port: 5432
+postgresql_listen_addresses: '127.0.0.1'
+postgresql_packages: []
+postgresql_client_packages: []
+postgresql_login_unix_socket: /var/run/postgresql
+postgresql_databases: []
+postgresql_users: []
+postgresql_allowed_cidrs:
+  - 127.0.0.1/32
+  - ::1/128
+postgresql_backup_cmd: /usr/bin/pg_dumpall
+postgresql_restore_cmd: /usr/bin/psql

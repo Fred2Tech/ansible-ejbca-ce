@@ -1,0 +1,17 @@
+---
+# handlers file for primekeyprep
+
+- name: restart wildfly
+  ansible.builtin.systemd_service:
+    name: wildfly
+    state: restarted
+
+- name: stop wildfly
+  ansible.builtin.systemd_service:
+    name: wildfly
+    state: stopped
+
+- name: start wildfly
+  ansible.builtin.systemd_service:
+    name: wildfly
+    state: started

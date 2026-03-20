@@ -1,0 +1,130 @@
+---
+
+- name: Discover PostgreSQL cluster information
+  ansible.builtin.command: pg_lsclusters --no-header
+  register: postgresql_cluster_info
+  failed_when: false
+  changed_when: false
+  when:
+    - ansible_facts['os_family'] == 'Debian'
+
+- name: Record PostgreSQL cluster facts
+  ansible.builtin.set_fact:
+    postgresql_cluster_version: "{{ postgresql_cluster_info.stdout_lines[0].split()[0] }}"
+    postgresql_cluster_name: "{{ postgresql_cluster_info.stdout_lines[0].split()[1] }}"
+    postgresql_conf_dir: "/etc/postgresql/{{ postgresql_cluster_info.stdout_lines[0].split()[0] }}/{{ postgresql_cluster_info.stdout_lines[0].split()[1] }}"
+  when:
+    - ansible_facts['os_family'] == 'Debian'
+    - postgresql_cluster_info.rc == 0
+    - postgresql_cluster_info.stdout_lines | length > 0
+
+- name: Record PostgreSQL cluster facts on RedHat
+  ansible.builtin.set_fact:
+    postgresql_cluster_version: "unknown"
+    postgresql_cluster_name: main
+  when:
+    - ansible_facts['os_family'] == 'RedHat'
+
+- name: Skip PostgreSQL config during check mode when cluster is absent
+  ansible.builtin.debug:
+    msg: "Skipping PostgreSQL config in check mode because no local cluster is present yet."
+  when:
+    - ansible_check_mode
+    - ansible_facts['os_family'] == 'Debian'
+    - postgresql_cluster_info.rc == 0
+    - postgresql_cluster_info.stdout_lines | length == 0
+
+- name: Configure PostgreSQL settings for a fresh install
+  block:
+    - name: Keep peer authentication for local postgres superuser access
+      ansible.builtin.lineinfile:
+        path: "{{ postgresql_conf_dir }}/pg_hba.conf"
+        regexp: '^(?!#)\s*local\s+all\s+postgres\s+'
+        line: 'local   all             postgres                                peer'
+        insertbefore: '^(?!#)\s*local\s+all\s+all\s+'
+      notify: restart postgresql
+
+    - name: Set PostgreSQL local socket authentication for non-postgres users
+      ansible.builtin.lineinfile:
+        path: "{{ postgresql_conf_dir }}/pg_hba.conf"
+        regexp: '^(?!#)\s*local\s+all\s+all\s+'
+        line: 'local   all             all                                     scram-sha-256'
+      notify: restart postgresql
+
+    - name: Set PostgreSQL IPv4 localhost authentication
+      ansible.builtin.lineinfile:
+        path: "{{ postgresql_conf_dir }}/pg_hba.conf"
+        regexp: '^(?!#)\s*host\s+all\s+all\s+127\.0\.0\.1/32\s+'
+        line: 'host    all             all             127.0.0.1/32            scram-sha-256'
+      notify: restart postgresql
+
+    - name: Set PostgreSQL IPv6 localhost authentication
+      ansible.builtin.lineinfile:
+        path: "{{ postgresql_conf_dir }}/pg_hba.conf"
+        regexp: '^(?!#)\s*host\s+all\s+all\s+::1/128\s+'
+        line: 'host    all             all             ::1/128                 scram-sha-256'
+      notify: restart postgresql
+
+    - name: Set PostgreSQL listen addresses
+      ansible.builtin.lineinfile:
+        path: "{{ postgresql_conf_dir }}/postgresql.conf"
+        regexp: '^#?listen_addresses\s*='
+        line: "listen_addresses = '{{ postgresql_listen_addresses }}'"
+      notify: restart postgresql
+
+    - name: Set PostgreSQL port
+      ansible.builtin.lineinfile:
+        path: "{{ postgresql_conf_dir }}/postgresql.conf"
+        regexp: '^#?port\s*='
+        line: "port = {{ postgresql_port }}"
+      notify: restart postgresql
+
+    - name: Set PostgreSQL password encryption
+      ansible.builtin.lineinfile:
+        path: "{{ postgresql_conf_dir }}/postgresql.conf"
+        regexp: '^#?password_encryption\s*='
+        line: "password_encryption = 'scram-sha-256'"
+      notify: restart postgresql
+
+    - name: Configure PostgreSQL pg_hba rules for EJBCA
+      ansible.builtin.blockinfile:
+        path: "{{ postgresql_conf_dir }}/pg_hba.conf"
+        marker: "# {mark} ANSIBLE EJBCA POSTGRESQL ACCESS"
+        block: |
+          {% for cidr in postgresql_allowed_cidrs %}
+          {% if cidr not in ['127.0.0.1/32', '::1/128'] %}
+          host    all             all             {{ cidr }}            scram-sha-256
+          {% endif %}
+          {% endfor %}
+      notify: restart postgresql
+
+  when:
+    - postgresql_restore_cnf_files is not defined
+    - postgresql_conf_dir is defined
+
+- name: Restore PostgreSQL configuration files
+  block:
+    - name: Restore PostgreSQL config files from backup
+      ansible.builtin.copy:
+        src: "{{ restore_dir_path }}/postgresql/{{ item | basename }}"
+        dest: "{{ item }}"
+        remote_src: true
+      loop:
+        - "{{ postgresql_conf_dir }}/postgresql.conf"
+        - "{{ postgresql_conf_dir }}/pg_hba.conf"
+      notify: restart postgresql
+
+  when:
+    - postgresql_restore_cnf_files is defined
+    - postgresql_restore_cnf_files | bool
+    - postgresql_conf_dir is defined
+
+- name: Open PostgreSQL port in firewalld on RedHat
+  ansible.posix.firewalld:
+    port: "{{ postgresql_port }}/tcp"
+    permanent: true
+    immediate: true
+    state: enabled
+  when:
+    - ansible_facts['os_family'] == 'RedHat'
+    - postgresql_listen_addresses != '127.0.0.1'

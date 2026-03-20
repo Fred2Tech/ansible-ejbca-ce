@@ -1,0 +1,32 @@
+---
+# defaults file for ansible-ejbca-certreq-websvc
+
+vault_csr_dir_output: "{{ playbook_dir }}/vaultCSR"
+vault_int_pki_name: pki_int
+vault_int_pki_passwd: "{{ encrypted_vault_int_pki_passwd | default(default_secret_value) }}"
+vault_int_ca_common_name: Vault Intermediate Authority GX2
+ejbcawsracli_host: "{{ httpd_identity_info.id_name | default(pki_server_fqdn | default(hostname | default('pki01.' ~ organizationDomainName))) }}"
+vault_int_root_ca_name: "{{ root_ca_name }}"
+vault_int_root_ca_subject_dn: "{{ (management_add_certification_authorities | default([]) | selectattr('caname', 'equalto', vault_int_root_ca_name) | map(attribute='dn') | first) | default('CN=' ~ organizationName ~ ' Root CA G1,OU=Certification Authorities,O=' ~ organizationName ~ ',C=' ~ countryName) }}"
+vault_int_root_ca_cert_url: "https://{{ ejbcawsracli_host }}/ejbca/publicweb/webdist/certdist?cmd=cacert&issuer={{ vault_int_root_ca_subject_dn | urlencode }}&level=0"
+vault_int_ca_ejbca_dn: "CN={{ vault_int_ca_common_name }},OU=Certification Authorities,OU={{ organizationName }},O={{ organizationName }}"
+vault_int_ca_ejbca_rootca_sign: "{{ vault_int_root_ca_name }}"
+vault_int_ca_ejbca_certprofile: HashiCorp-SubCA-G1
+vault_int_ca_ejbca_endentityprofile: Hashicorp-SubCA 
+vault_int_ca_ejbca_status: NEW
+
+ejbca_root_dir: /opt
+ejbca_home: "{{ ejbca_root_dir }}/ejbca"
+ejbca_sh: "{{ ejbca_home }}/bin/ejbca.sh"
+ejbca_toolbox: "{{ ejbca_root_dir }}/clientToolBox"
+ejbca_toolbox_cmd: "{{ ejbca_root_dir }}/clientToolBox/ejbcaClientToolBox.sh"
+ejbca_group: primekey
+ejbca_user: primekey
+
+ejbcawsracli_url: "https://{{ ejbcawsracli_host }}/ejbca/ejbcaws/ejbcaws"
+ejbcawsracli_keystore_path: "/opt/ejbca/p12/{{ management_add_end_entities[0].username | default(organizationName ~ '-SuperAdministrator') }}.p12"
+ejbcawsracli_keystore_password: "{{ encrypted_ejbcawsracli_keystore_password | default(default_secret_value) }}"
+ejbcawsracli_truststore_path: "{{ ejbca_toolbox }}/truststore"
+ejbcawsracli_truststore_caid: 1595111880
+ejbcawsracli_truststore_url: "https://{{ ejbcawsracli_host }}/ejbca/publicweb/webdist/certdist?cmd=cachain&caid={{ ejbcawsracli_truststore_caid }}&format=jks"
+

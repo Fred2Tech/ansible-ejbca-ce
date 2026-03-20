@@ -1,0 +1,33 @@
+---
+
+- name: Create PostgreSQL databases
+  community.postgresql.postgresql_db:
+    name: "{{ item.name }}"
+    owner: "{{ item.owner | default(omit) }}"
+    encoding: "{{ item.encoding | default(omit) }}"
+    login_unix_socket: "{{ postgresql_login_unix_socket }}"
+    login_user: postgres
+    state: present
+  become: true
+  become_user: postgres
+  loop: "{{ postgresql_databases }}"
+  loop_control:
+    label: "{{ item.name }}"
+  tags: postgresql
+
+- name: Grant PostgreSQL database privileges
+  community.postgresql.postgresql_privs:
+    login_db: "{{ item.db }}"
+    privs: "{{ item.priv | default('ALL') }}"
+    type: database
+    role: "{{ item.name }}"
+    login_unix_socket: "{{ postgresql_login_unix_socket }}"
+    login_user: postgres
+    state: present
+  become: true
+  become_user: postgres
+  loop: "{{ postgresql_users }}"
+  when:
+    - item.db is defined
+  no_log: "{{ no_log_value }}"
+  tags: postgresql

@@ -1,0 +1,22 @@
+---
+
+- name: Create import file structure
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: 0755
+    owner: "{{ 'root' if ansible_check_mode else ejbca_user }}"
+    group: "{{ 'root' if ansible_check_mode else ejbca_group }}"
+  loop: "{{ profile_dir_structure }}"
+
+- name: Prepare import template files for importing
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: "{{ 'root' if ansible_check_mode else ejbca_user }}"
+    group: "{{ 'root' if ansible_check_mode else ejbca_group }}"
+    mode: 0664
+  loop: "{{ profile_import_list }}"
+  loop_control:
+    label: "{{ item.dest }}"
+  register: prepare_import_files

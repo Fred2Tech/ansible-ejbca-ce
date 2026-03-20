@@ -1,0 +1,153 @@
+---
+# task file for wildfly
+
+- name: Task - Install OS packages required for Wildfly
+  ansible.builtin.include_tasks: install_os_packages.yml
+  when: 
+    - wildfly_manage_java_pkg or wildfly_use_galleon|bool
+
+- name: Check if wildfly directory exists
+  ansible.builtin.stat:
+    path: "{{ wildfly_dir }}"
+  register: wildfly_src_dir
+  changed_when: false
+
+- name: Download wildfly {{ wildfly_version }} tar file
+  ansible.builtin.get_url:
+    url: '{{ wildfly_download_url }}'
+    dest: '{{ wildfly_download_dir }}/{{ wildfly_download_file }}'
+    validate_certs: '{{ wildfly_download_validate_certs }}'
+    checksum: "{{ wildfly_checksum }}"
+  when: 
+    - not wildfly_src_dir.stat.exists
+    - not wildfly_use_galleon|bool
+
+- name: Download wildfly Galleon {{ wildfly_galleon_version }}
+  ansible.builtin.get_url:
+    url: '{{ wildfly_galleon_download_url }}'
+    dest: '{{ wildfly_download_dir }}/{{ wildfly_galleon_download_file }}'
+    validate_certs: '{{ wildfly_download_validate_certs }}'
+    checksum: "{{ wildfly_galleon_checksum }}"
+  when: 
+    - not wildfly_src_dir.stat.exists
+    - wildfly_use_galleon|bool
+
+- name: Task - Create Wildfly user and group
+  ansible.builtin.include_tasks: user.yml
+  when: 
+    - wildfly_manage_user|bool
+
+- name: Unarchive downloaded wildfly {{ wildfly_version }} tar file
+  ansible.builtin.unarchive:
+    src: '{{ wildfly_download_dir }}/{{ wildfly_download_file }}'
+    dest: '{{ wildfly_install_dir }}'
+    owner: '{{ ejbca_user }}'
+    group: '{{ ejbca_group }}'
+    mode: '{{ wildfly_dir_mode }}'
+    creates: "{{ wildfly_dir }}/bin/standalone.sh"
+    remote_src: yes
+  when: 
+    - not wildfly_src_dir.stat.exists
+    - not wildfly_use_galleon|bool
+    - not ansible_check_mode
+
+- name: Unarchive downloaded wildfly Galleon {{ wildfly_galleon_version }} file
+  ansible.builtin.unarchive:
+    src: '{{ wildfly_download_dir }}/{{ wildfly_galleon_download_file }}'
+    dest: '{{ wildfly_galleon_install_dir }}'
+    owner: '{{ ejbca_user }}'
+    group: '{{ ejbca_group }}'
+    mode: '{{ wildfly_dir_mode }}'
+    creates: "{{ wildfly_galleon_install_dir }}/bin/galleon.sh"
+    remote_src: yes
+  when: 
+    - not wildfly_src_dir.stat.exists
+    - wildfly_use_galleon|bool
+    - not ansible_check_mode
+
+- name: Install wildfly {{ wildfly_version }} using Galleon {{ wildfly_galleon_version }}
+  ansible.builtin.command: >
+    {{ wildfly_galleon_bin }}/bin/galleon.sh install wildfly:current#{{ wildfly_version }} 
+    --dir={{ wildfly_dir }} 
+    --default-configs=standalone/standalone.xml
+    {% if wildfly_version.split('.')[0]|int >= 25 %} 
+    --layers=cloud-server,deployment-scanner,ejb-lite,remoting,resource-adapters,undertow,io,jsf,mail,webservices,-jsonb,-jms-activemq,-observability,-jmx-remoting,-messaging-activemq
+    {% elif wildfly_version.split('.')[0]|int <= 24 %} 
+    --layers=cdi,core-tools,datasources,deployment-scanner,ee,-jsonb,ejb,io,jaxrs,jpa,jsf,logging,mail,management,webservices,legacy-security
+    {% endif %}
+  when: 
+    - not wildfly_src_dir.stat.exists
+    - wildfly_use_galleon|bool
+    - not ansible_check_mode
+
+- name: Make client dir for jboss-client.jar
+  ansible.builtin.file:
+    path: "{{ wildfly_dir }}/bin/client"
+    state: directory
+    owner: '{{ ejbca_user }}'
+    group: '{{ ejbca_group }}'
+    mode: 0750
+  when:
+    - wildfly_create_symlink
+    - not wildfly_src_dir.stat.exists
+    - not ansible_check_mode
+
+- name: Download wildfly {{ wildfly_version }} jboss-client.jar
+  ansible.builtin.get_url:
+    url: '{{ wildfly_jboss_client_download_url }}'
+    dest: '{{ wildfly_dir }}/bin/client/{{ wildfly_jboss_client_file }}'
+    validate_certs: '{{ wildfly_download_validate_certs }}'
+    checksum: "{{ wildfly_jboss_client_checksum }}"
+  when: 
+    - not wildfly_src_dir.stat.exists
+    - wildfly_use_galleon|bool
+    - not ansible_check_mode
+
+- name: Fixes for Wildfly 26
+  block:
+
+    - name: Update elytron-tool.sh due to bug with Wildfly 26 Galleon install
+      ansible.builtin.template:
+        src: elytron-tool.sh.j2
+        dest: "{{ wildfly_dir }}/bin/elytron-tool.sh"
+        owner: "{{ ejbca_user }}"
+        group: "{{ ejbca_group }}" 
+        force: yes
+        mode: 0755
+
+    - name: Download wildfly-elytron-tool.jar that has main class to  work with the elytron-tool.sh script
+      ansible.builtin.get_url:
+        url: "{{ wildfly_elytron_tool_download_url }}"
+        dest: "{{ wildfly_dir }}/bin/wildfly-elytron-tool.jar"
+        validate_certs: "{{ wildfly_download_validate_certs }}"
+        checksum: "{{ wildfly_elytron_tool_checksum }}"
+        owner: "{{ ejbca_user }}"
+        group: "{{ ejbca_group }}"
+        force: yes
+
+  when:
+    - wildfly_version.split('.')[0]|int == 26
+    - wildfly_use_galleon|bool
+    - not ansible_check_mode
+
+- name: Configure ownership on wildfly installed with Galleon
+  ansible.builtin.file:
+    path: "{{ wildfly_dir }}"
+    state: directory
+    recurse: yes
+    owner: '{{ ejbca_user }}'
+    group: '{{ ejbca_group }}'
+  when:
+    - wildfly_create_symlink
+    - not wildfly_src_dir.stat.exists
+    - not ansible_check_mode
+
+- name: Create symlink to installed version
+  ansible.builtin.file:
+    state: link
+    src: "{{ wildfly_dir }}"
+    dest: "{{wildfly_home }}"
+  when: 
+    - wildfly_create_symlink
+    - not wildfly_src_dir.stat.exists
+    - not ansible_check_mode

@@ -1,0 +1,7 @@
+---
+# tasks file for ansible-ejbca-certreq-websvc
+
+
+- ansible.builtin.include_tasks: configure.yml
+
+- ansible.builtin.include_tasks: issue_cert.yml

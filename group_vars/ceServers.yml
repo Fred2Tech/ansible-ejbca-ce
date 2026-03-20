@@ -1,0 +1,366 @@
+---
+
+# Enable VA peer integration
+use_external_va: false
+
+# Enable RA peer integration
+use_external_ra: false
+
+# Enable Sign Server peer integration
+use_external_ss: false
+
+# Deploy CAs using configdump instead of CLI
+deploy_with_configdump: false
+configdump_directory_structure: "{{ configdump_dir_structure }}"
+configdump_import_files: "{{ configdump_files }}"
+
+# Add publishers to existing CAs
+add_publshers_to_cas: true
+
+# Version and source
+ejbca_version: 9.3.7
+# Use local controller as software repository
+use_local_repository: false
+ejbca_remote_dir: ~/Downloads/PK-Software/ejbca-ce-r9.3.7.zip
+# EJBCA URL to download the zip release file
+ejbca_software_url: https://github.com/Keyfactor/ejbca-ce/archive/refs/tags/r9.3.7.zip
+ejbca_src_dir_name: ejbca-ce-r9.3.7
+ejbca_type: CA
+
+# EJBCA Upgrade version
+ejbca_upgrade_version: 9.3.7
+# Upgrade download URL
+ejbca_upgrade_software_url: "{{ ejbca_software_url }}"
+# Upgrade source directory
+ejbca_upgrade_src_dir: "{{ ejbca_src_dir_name }}"
+
+# Datasource configuration
+appsrv_datasources:
+  - jndi_name: "java:/EjbcaDS"
+    pool_name: ejbcads
+    database_connection_type: "{{ database_connection_type }}"
+    database_driver_class: "{{ database_driver_class }}"
+    database_jar_filename: "{{ database_jar_filename }}"
+    loadbalancing: false
+    loadbalanced_hosts:
+      - host: "dbhost01.{{ domain_name }}"
+        port: "{{ database_port }}"
+      - host: "dbhost02.{{ domain_name }}"
+        port: "{{ database_port }}"
+      - host: "dbhost03.{{ domain_name }}"
+        port: "{{ database_port }}"
+    host: "{{ database_host }}"
+    backup_host: "{{ database_backup_host }}"
+    port: "{{ database_port }}"
+    database: "{{ database_name }}"
+    user: "{{ database_user }}"
+    credential_ref: dbPassword
+    password: "{{ database_password }}"
+
+# Syslog (optional)
+#appsrv_syslogsources:
+#  - name: SYSLOGTCP
+#    enabled: true
+#    log_level: INFO
+#    ejbca_host: my.host
+#    syslog_app_name: WildFly
+#    syslog_server_address: my.graylog.server
+#    syslog_server_port: 514
+#    syslog_facility: local-use-1
+
+# HSM configuration
+use_softhsm: true
+use_ncipher: false
+use_safenet_lunasa: false
+ansible_python_interpreter: /usr/bin/python3
+# Run via preload
+ncipher_preload: false
+# Preload executable path
+preload_path: /opt/nfast/bin/preload
+# PKCS#11 library path
+hsm_shared_library: "{{ '/usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so' if ansible_facts.os_family == 'Debian' else '/usr/lib64/softhsm/libsofthsm2.so' }}"
+
+pki_domain_name: "{{ domain_name }}"
+pki_server_fqdn: "{{ pki_server_name }}.{{ pki_domain_name }}"
+organizationDomainName: "{{ pki_domain_name }}"
+
+hostname: "{{ pki_server_fqdn }}"
+
+# Set to false only for debugging
+no_log_value: true
+
+# TLS certificate end entity
+identity_info:
+  - dn: "C={{ countryName }},O={{ organizationName }},OU=Devices,CN={{ pki_server_fqdn }}"
+    name: "{{ pki_server_fqdn }}"
+    full_dn: "C={{ countryName }},O={{ organizationName }},OU=Devices,CN={{ pki_server_fqdn }}"
+    username: "{{ pki_server_fqdn }}"
+    password: "{{ httpd_identity_password }}"
+    altname: "dNSName={{ pki_server_fqdn }}"
+    certprofile: SERVER
+    eeprofile: "EMPTY"
+    caname: "{{ sub_ca_name }}"
+    token: PEM
+    useType: ca
+
+# TLS certificate file mapping
+httpd_identity_info:
+  id_name: "{{ identity_info[0].name }}"
+  id_ca_cert_file: "{{ identity_info[0].caname }}.crt"
+
+# Super Admin accounts to create
+management_add_end_entities:
+  - username: "{{ organizationName }}-SuperAdministrator"
+    legacy_usernames:
+      - SkyrimSuperAdministrator
+    dn: "C={{ countryName }},O={{ organizationName }},OU=Administrators,CN={{ superAdminCn }}"
+    caname: "{{ management_ca_name }}"
+    token: "P12"
+    password: "{{ superadmin_enrollment_code }}"
+    certprofile: ENDUSER
+    eeprofile: EMPTY
+
+# Super Admin role members
+management_add_administrators:
+  - role: "Super Administrator Role"
+    caname: "{{ management_ca_name }}"
+    match_with: "WITH_COMMONNAME"
+    match_value: "{{ superAdminCn }}"
+
+management_add_certification_authorities:
+  - caname: "{{ management_ca_name }}"
+    certprofile: "{{ management_ca_certprofile }}"
+    dn: "{{ management_ca_dn }}"
+    subjectaltname: ""
+    validity: "3650"
+    validity_yml: "10y"
+    policy: "null"
+    signalg: "SHA256WithRSA"
+    serial_number_octet_size: 20
+    pre_produce_ocsp_responses: false
+    store_responses_on_demand: false
+    use_append_only_table: false
+    use_utf8_in_policy_notice_text: false
+    defaultCRLDP: "http://crl.{{ organizationDomainName }}/CRLs/{{ organizationName | lower }}-mgmtca.crl"
+    defaultOCSPServiceLocator: "http://ocsp.{{ organizationDomainName }}/ocsp"
+    authorityInformationAccess: "http://aia.{{ organizationDomainName }}/AIA/{{ organizationName | lower }}-mgmtca.crt"
+    certificateAiaDefaultCaIssuerUri: "http://aia.{{ organizationDomainName }}/AIA/{{ organizationName | lower }}-mgmtca.crt"
+    crlPeriod: 259200000
+    crl_overlap_time: 600000
+    crlIssueInterval: 86400000
+    crlIssueInterval_yml: 1d
+    crlPeriod_yml: 3d
+    crl_overlap_time_yml: 10m
+    delta_crl_period: 0m
+    useLdapDnOrder: false
+    enforce_unique_public_keys: true
+    enforce_key_renewal: false
+    enforce_unique_dn: true
+    user_storage: true
+    certificate_storage: true
+    accept_revocations_for_non_existing_entries: false
+    finish_user: true
+    ca_healthcheck_enabled: true
+    request_processor: null
+    cryptotoken_enable_auto_activate: true
+    tokentype: soft
+    tokenpass: "{{ mgmtca_token_pin }}"
+    slot_identifier_type: "SLOT_LABEL"
+    slot_identifier_value: "Management_CA_SLOT"
+    force_used_slots: true
+    crypto_token:
+      - key_label: "signKey0001"
+        key_size: 3072
+        key_type: "RSA"
+        type: sign
+      - key_label: "defaultKey0001"
+        key_size: 3072
+        key_type: "RSA"
+        type: default
+      - key_label: "testKey"
+        key_size: 1024
+        key_type: "RSA"
+        type: test
+    publishers:
+      - validationAuthorityPeerPub-OCSP-01
+  - caname: "{{ root_ca_name }}"
+    certprofile: "RootCA-G1"
+    dn: "CN={{ root_ca_name }} G1,OU=Certification Authorities,O={{ organizationName }},C={{ countryName }}"
+    subjectaltname: ""
+    validity: "9125"
+    validity_yml: "25y"
+    policy: "null"
+    signalg: "SHA512WithRSA"
+    serial_number_octet_size: 20
+    pre_produce_ocsp_responses: false
+    store_responses_on_demand: false
+    use_append_only_table: false
+    use_utf8_in_policy_notice_text: false
+    defaultCRLDP: "http://crl.{{ organizationDomainName }}/CRLs/{{ organizationNameShort | lower }}-rootca-g1.crl"
+    defaultOCSPServiceLocator: "http://ocsp.{{ organizationDomainName }}/ocsp"
+    authorityInformationAccess: "http://aia.{{ organizationDomainName }}/AIA/{{ organizationNameShort | lower }}-rootca-g1.crt"
+    certificateAiaDefaultCaIssuerUri: "http://aia.{{ organizationDomainName }}/{{ organizationNameShort | lower }}-rootca-g1.crt"
+    crlPeriod: 15552000000
+    crlPeriod_yml: 6mo
+    crlIssueInterval: 0
+    crlIssueInterval_yml: 0m
+    crl_overlap_time: 600000
+    crl_overlap_time_yml: 10m
+    delta_crl_period: 0m
+    useLdapDnOrder: false
+    enforce_unique_public_keys: true
+    enforce_key_renewal: false
+    enforce_unique_dn: true
+    user_storage: true
+    certificate_storage: true
+    accept_revocations_for_non_existing_entries: false
+    finish_user: true
+    ca_healthcheck_enabled: true
+    request_processor: null
+    cryptotoken_enable_auto_activate: true
+    tokentype: soft
+    tokenpass: "{{ rootca_token_pin }}"
+    slot_identifier_type: "SLOT_LABEL"
+    slot_identifier_value: "Root_CA_SLOT"
+    force_used_slots: true
+    crypto_token:
+      - key_label: "signKey0001"
+        key_size: 4096
+        key_type: "RSA"
+        type: sign
+      - key_label: "defaultKey0001"
+        key_size: 4096
+        key_type: "RSA"
+        type: default
+      - key_label: "testKey"
+        key_size: 1024
+        key_type: "RSA"
+        type: test
+    publishers:
+      - validationAuthorityPeerPub-OCSP-01
+
+sub_add_certification_authorities:
+  - caname: "{{ sub_ca_name }}"
+    certprofile: "SubCA-G1"
+    dn: "CN={{ sub_ca_name }} G1,OU=Certification Authorities,O={{ organizationName }},C={{ countryName }}"
+    rootDn: "CN={{ root_ca_name }} G1,OU=Certification Authorities,O={{ organizationName }},C={{ countryName }}"
+    root_ca_name: "{{ root_ca_name }}"
+    subjectaltname: ""
+    validity: "3650"
+    validity_yml: "10y"
+    policy: "null"
+    signalg: "SHA256WithRSA"
+    serial_number_octet_size: 20
+    pre_produce_ocsp_responses: false
+    store_responses_on_demand: false
+    use_append_only_table: false
+    use_utf8_in_policy_notice_text: false
+    defaultCRLDP: "http://crl.{{ organizationDomainName }}/CRLs/{{ organizationNameShort | lower }}-subca-g1.crl"
+    defaultOCSPServiceLocator: "http://ocsp.{{ organizationDomainName }}/ocsp"
+    authorityInformationAccess: "http://aia.{{ organizationDomainName }}/AIA/{{ organizationNameShort | lower }}-subca-g1.crt"
+    certificateAiaDefaultCaIssuerUri: "http://aia.{{ organizationDomainName }}/AIA/{{ organizationNameShort | lower }}-subca-g1.crt"
+    crlPeriod: 259200000
+    crlPeriod_yml: 3d
+    crlIssueInterval: 86400000
+    crlIssueInterval_yml: 1d
+    crl_overlap_time: 600000
+    crl_overlap_time_yml: 10m
+    delta_crl_period: 0m
+    useLdapDnOrder: false
+    enforce_unique_public_keys: true
+    enforce_key_renewal: false
+    enforce_unique_dn: false
+    user_storage: true
+    certificate_storage: true
+    accept_revocations_for_non_existing_entries: false
+    finish_user: true
+    ca_healthcheck_enabled: true
+    request_processor: null
+    cryptotoken_enable_auto_activate: true
+    tokentype: soft
+    tokenpass: "{{ subca_token_pin }}"
+    slot_identifier_type: "SLOT_LABEL"
+    slot_identifier_value: "Sub_CA_SLOT"
+    force_used_slots: true
+    crypto_token:
+      - key_label: "signKey0001"
+        key_size: 3072
+        key_type: "RSA"
+        type: sign
+      - key_label: "defaultKey0001"
+        key_size: 3072
+        key_type: "RSA"
+        type: default
+      - key_label: "testKey"
+        key_size: 1024
+        key_type: "RSA"
+        type: test
+    publishers:
+      - validationAuthorityPeerPub-OCSP-01
+
+import_cp_dir_structure:
+  - "{{ ejbca_home }}/imports/import1"
+
+import_cp_files:
+  - src: 'certprofile_adminMgmtCA-941673793.xml.j2'
+    dest: '{{ ejbca_home }}/imports/import1/certprofile_adminMgmtCA-941673793.xml'
+  - src: 'certprofile_managementCA-1713220807.xml.j2'
+    dest: '{{ ejbca_home }}/imports/import1/certprofile_managementCA-1713220807.xml'
+  - src: 'certprofile_RootCA-G1-2019521134.xml.j2'
+    dest: '{{ ejbca_home }}/imports/import1/certprofile_RootCA-G1-2019521134.xml'
+  - src: 'certprofile_SubCA-G1-101839718.xml.j2'
+    dest: '{{ ejbca_home }}/imports/import1/certprofile_SubCA-G1-101839718.xml'
+  - src: 'certprofile_tlsServerClientAuth-1938133563.xml.j2'
+    dest: '{{ ejbca_home }}/imports/import1/certprofile_tlsServerClientAuth-1938133563.xml'
+
+ejbca_templated_properties_files:
+  - src: cesecore.properties.j2
+    dest: "{{ ejbca_home }}/../ejbca-custom/conf/cesecore.properties"
+  - src: database.properties.j2
+    dest: "{{ ejbca_home }}/../ejbca-custom/conf/database.properties"
+  - src: ejbca.properties.j2
+    dest: "{{ ejbca_home }}/../ejbca-custom/conf/ejbca.properties"
+  - src: web.properties.j2
+    dest: "{{ ejbca_home }}/../ejbca-custom/conf/web.properties"
+  - src: mail.properties.j2
+    dest: "{{ ejbca_home }}/../ejbca-custom/conf/mail.properties"
+  - src: custom.properties.j2
+    dest:  "{{ ejbca_home }}/../ejbca-custom/conf/custom.properties"
+
+# Web hostname
+web_httpserver_hostname: "{{ httpd_identity_info.id_name }}"
+    
+# CRL configuration
+certification_authorities_crl_files:
+  - crlfilename: "{{ organizationNameShort | lower }}-mgmtca.crl"
+    cadn: "{{ management_ca_dn | urlencode }}"
+  - crlfilename: "{{ organizationNameShort | lower }}-rootca-g1.crl"
+    cadn: "CN%3d{{ organizationNameCRL }}+Root+CA+G1%2cOU%3dCertification+Authorities%2cO%3d{{ organizationNameCRL }}%2cC%3d{{ countryName }}"
+  - crlfilename: "{{ organizationNameShort | lower }}-subca-g1.crl"
+    cadn: "CN%3d{{ organizationNameCRL }}+Issuing+CA+G1%2cOU%3dCertification+Authorities%2cO%3d{{ organizationNameCRL }}%2cC%3d{{ countryName }}"
+
+# Protocols to disable
+#disable_ejbca_protocols:
+  #- name: OCSP
+  #- name: SCEP
+  #- name: 'RA Web'
+
+# Protocols to enable
+enable_ejbca_protocols:
+  - name: Certstore
+  - name: CMP
+  - name: CRLstore
+  - name: OCSP
+  - name: SCEP
+  - name: Webdist
+  - name: 'Web Service'
+
+# CRL Update Service Worker Settings
+crl_service_time_int: 1
+crl_service_time_unit: HOURS
+
+# Install DB server (local mode)
+mariadb_install_server: "{{ database_engine == 'mariadb' and database_deployment_mode == 'local' }}"
+
+# Install DB client only (remote mode)
+mariadb_install_client: "{{ database_engine == 'mariadb' and database_deployment_mode == 'remote' }}"

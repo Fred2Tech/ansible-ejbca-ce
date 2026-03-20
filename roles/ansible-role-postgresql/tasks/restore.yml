@@ -1,0 +1,16 @@
+---
+
+- name: Unzip the PostgreSQL backup file
+  ansible.builtin.unarchive:
+    src: "{{ restore_dir_path }}/postgresql/ejbca.sql.tar.gz"
+    dest: "{{ restore_dir_path }}/postgresql/"
+    remote_src: true
+  tags: restore_backup
+
+- name: Restore PostgreSQL backup from sql file
+  ansible.builtin.shell: |
+    {{ postgresql_restore_cmd }} -f "{{ restore_dir_path }}/postgresql/ejbca.sql" postgres
+  become: true
+  become_user: postgres
+  no_log: "{{ no_log_value }}"
+  tags: restore_backup

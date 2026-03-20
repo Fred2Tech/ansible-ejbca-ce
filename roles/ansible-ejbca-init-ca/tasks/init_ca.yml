@@ -1,0 +1,155 @@
+---
+
+#TODO
+# Add /opt/ejbca-custom/conf directory if it doesn't exist
+
+- block:
+    - name: Copy {{ item.caname }} Token properties file is copied over
+      ansible.builtin.template:
+        src: catoken_template.properties.j2
+        dest: "{{ ejbca_home }}/../ejbca-custom/conf/{{ item.caname }}.catoken.properties"
+        owner: "{{ ejbca_user }}"
+        group: "{{ ejbca_group }}"
+      no_log: "{{ no_log_value }}"
+
+    - name: Init Root or Self Signed Issuing CA
+      block:
+        - name: Create {{ item.caname }}
+          ansible.builtin.command: >
+            "{{ ejbca_sh }}" ca init
+            --caname "{{ item.caname }}"
+            --dn "{{ item.dn }}"
+            --tokenName {{ item.caname }}
+            {% if item.tokenpass is defined %}--tokenPass "{{ item.tokenpass }}"{% endif %}
+            --tokenprop "{{ ejbca_home }}/../ejbca-custom/conf/{{ item.caname }}.catoken.properties"
+            {% for val in item.crypto_token %}{% if 'sign' == val.type %}
+            --keyspec "{{ val.key_size }}"
+            --keytype "{{ val.key_type }}"
+            {% endif %}{% endfor %}
+            -s "{{ item.signalg }}"
+            -v "{{ item.validity }}"
+            --policy "{{ item.policy }}"
+            {% if item.subjectaltname is defined %}--subjectaltname "{{ item.subjectaltname }}" {% endif %}
+            -certprofile "{{ item.certprofile }}"
+          no_log: "{{ no_log_value }}"
+          become: true
+          become_user: "{{ ejbca_user }}"
+          register: initializing_management_ca
+          failed_when: initializing_management_ca.rc >= 2
+          changed_when: initializing_management_ca.rc == 0
+      when:
+        - item.rootDn is not defined
+
+    - name: Init Policy or Sub CA with local Root CA
+      block:
+        - name: Query CA ID of Root CA for {{ item.caname }}
+          ansible.builtin.command: "{{ ejbca_home }}/../clientToolBox/ejbcaClientToolBox.sh CaIdGenerator '{{ item.rootDn }}'"
+          args:
+            chdir: "{{ ejbca_home }}/../clientToolBox"
+          register: root_ca_id
+          no_log: "{{ no_log_value }}"
+          become: true
+          become_user: "{{ ejbca_user }}"
+          changed_when: false
+
+        - name: Set Root CA ID for {{ item.caname }}
+          ansible.builtin.set_fact:
+            root_ca_id_value: "{{ root_ca_id.stdout_lines[-1] | trim }}"
+          no_log: "{{ no_log_value }}"
+
+        - name: Create {{ item.caname }}
+          ansible.builtin.command: >
+            "{{ ejbca_sh }}" ca init
+            --caname "{{ item.caname }}"
+            --dn "{{ item.dn }}"
+            --tokenName {{ item.caname }}
+            {% if item.tokenpass is defined %}--tokenPass "{{ item.tokenpass }}"{% endif %}
+            --tokenprop "{{ ejbca_home }}/../ejbca-custom/conf/{{ item.caname }}.catoken.properties"
+            {% for val in item.crypto_token %}{% if 'sign' == val.type %}
+            --keyspec "{{ val.key_size }}"
+            --keytype "{{ val.key_type }}"
+            {% endif %}{% endfor %}
+            -s "{{ item.signalg }}"
+            -v "{{ item.validity }}"
+            --policy "{{ item.policy }}"
+            {% if item.subjectaltname is defined %}--subjectaltname "{{ item.subjectaltname }}" {% endif %}
+            -certprofile "{{ item.certprofile }}"
+            --signedby "{{ root_ca_id_value }}"
+          no_log: "{{ no_log_value }}"
+          become: true
+          become_user: "{{ ejbca_user }}"
+          register: initializing_sub_ca
+          failed_when: initializing_sub_ca.rc >= 2
+          changed_when: initializing_sub_ca.rc == 0
+      when:
+        - item.rootDn is defined
+        - item.rootDn != 'External'
+
+    - name: Init CA to create a CSR to sign with an external Root CA
+      block:
+        - name: Download external CA chain for creating an External CA {{ item.caname }}
+          ansible.builtin.uri:
+            url: "{{ item.external_root_cachain_url }}"
+            validate_certs: no
+            dest: "/var/tmp/{{ item.external_root_cachain_file | basename }}"
+            creates: "/var/tmp/{{ item.external_root_cachain_file | basename }}"
+            owner: "{{ ejbca_user }}"
+            group: "{{ ejbca_group }}"
+          no_log: "{{ no_log_value }}"
+          when: not item.external_root_cachain_local_repository|bool
+
+        - name: Upload external CA chain from Ansible controller for creating an External CA {{ item.caname }}
+          ansible.builtin.copy:
+            src: "{{ item.external_root_cachain_local_file }}"
+            dest: "/var/tmp/{{ item.external_root_cachain_file | basename }}"
+            owner: "{{ ejbca_user }}"
+            group: "{{ ejbca_group }}"
+          no_log: "{{ no_log_value }}"
+          when: item.external_root_cachain_local_repository|bool
+
+        - name: Create a CA CSR to be signed by an external CA for {{ item.caname }}
+          ansible.builtin.command: >
+            "{{ ejbca_sh }}" ca init
+            --caname "{{ item.caname }}"
+            --dn "{{ item.dn }}"
+            --tokenName {{ item.caname }}
+            {% if item.tokenpass is defined %}--tokenPass "{{ item.tokenpass }}"{% endif %}
+            --tokenprop "{{ ejbca_home }}/../ejbca-custom/conf/{{ item.caname }}.catoken.properties"
+            {% for val in item.crypto_token %}{% if 'sign' == val.type %}
+            --keyspec "{{ val.key_size }}"
+            --keytype "{{ val.key_type }}"
+            {% endif %}{% endfor %}
+            -s "{{ item.signalg }}"
+            -v "{{ item.validity }}"
+            --policy "{{ item.policy }}"
+            {% if item.subjectaltname is defined %}--subjectaltname "{{ item.subjectaltname }}" {% endif %}
+            --signedby "{{ item.rootDn }}"
+            -externalcachain "/var/tmp/{{ item.external_root_cachain_file | basename }}"
+          args:
+            chdir: "{{ ejbca_home }}"
+          no_log: "{{ no_log_value }}"
+          become: true
+          become_user: "{{ ejbca_user }}"
+          register: initializing_sub_ca_csr
+          failed_when: initializing_sub_ca_csr.rc >= 2
+          changed_when: initializing_sub_ca_csr.rc == 0
+
+        - name: Create local directories
+          become: false
+          ansible.builtin.file:
+            path: "{{ ejbca_csr_dir_output }}"
+            state: directory
+          delegate_to: localhost
+
+        - name: Copy the {{ item.caname }}_csr.der CSR locally
+          ansible.builtin.fetch:
+            src: "{{ ejbca_home }}/{{ item.caname }}_csr.der"
+            dest: "{{ ejbca_csr_dir_output }}/{{ item.caname }}_csr.der"
+            flat: yes
+          no_log: "{{ no_log_value }}"
+          register: copy_down_csr
+      when:
+        - item.rootDn is defined
+        - item.rootDn == 'External'
+  when:
+    - not ansible_check_mode

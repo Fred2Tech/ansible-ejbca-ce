@@ -1,0 +1,68 @@
+---
+
+# Maria DB settings for using MariaDB database
+mariadb_binlog_format: ROW
+mariadb_databases:
+  - name: ejbca
+    collation: "utf8mb4_unicode_520_ci"
+    encoding: "utf8mb4"
+mariadb_install_server: true
+
+# Install only the Python MariaDB client for Ansible to connect to the DB. Use this option when the DB is not installed on the EJBCA node.
+mariadb_install_client: false
+
+# MariaDB server hostname must listen on the LAN for the external EJBCA node.
+mariadb_users:
+  - name: "{{ database_user }}"
+    password: "{{ database_password }}"
+    priv: "ejbca.*:ALL"
+    host: "%"
+  - name: "{{ database_user }}"
+    password: "{{ database_password }}"
+    priv: "ejbca.*:ALL"
+    host: "localhost"
+
+# MariaDB username & Password with permissions to dump the database to SQL file
+mariadb_backup_user: root
+mariadb_backup_user_password: "{{ mariadb_root_password }}"
+# Location of the mariadb-dump command
+mariadb_backup_cmd: /usr/bin/mariadb-dump
+# Location of the mariadb command
+mariadb_cmd: /usr/bin/mariadb
+ 
+mariadb_owner: mysql
+mariadb_group: mysql
+
+mariadb_mirror: yum.mariadb.org
+mariadb_version: '11.8'
+
+mariadb_configure_swappiness: true
+mariadb_swappiness: '10'
+
+# Network configuration (network.cnf)
+mariadb_srv_config_network: /etc/mysql/mariadb.conf.d/60-network.cnf
+mariadb_srv_config_server: /etc/mysql/mariadb.conf.d/50-server.cnf
+mariadb_srv_config_custom: /etc/mysql/mariadb.conf.d/99-custom.cnf
+
+mariadb_service: mariadb
+rhel_mariadb_service: rh-mariadb103-mariadb
+mariadb_bind_address: '0.0.0.0'
+
+# Server configuration
+mariadb_server_cnf:
+  log_error: /var/log/mariadb/mariadb.log
+
+# Custom configuration
+mariadb_custom_cnf: {}
+
+# Maria DB JDBC driver download URL for EjBCA
+ejbca_jdbc_driver: https://dlm.mariadb.com/4174416/Connectors/java/connector-java-3.5.2/mariadb-java-client-3.5.2.jar
+# Maria DB JDBC driver SHA256 hash
+ejbca_jdbc_driver_checksum: sha256:f2f3c3c1a3bdaca69dd1d4e1cd8aed075242fc72ae41463ddb82e367b388f6ad
+
+# Maria DB JDBC driver download URL for SignServer
+signsrv_jdbc_driver: https://dlm.mariadb.com/4174416/Connectors/java/connector-java-3.5.2/mariadb-java-client-3.5.2.jar
+# Maria DB JDBC driver SHA256 hash
+signsrv_jdbc_driver_checksum: sha256:f2f3c3c1a3bdaca69dd1d4e1cd8aed075242fc72ae41463ddb82e367b388f6ad
+# Generic file name for JDBC file
+signsrv_jdbc_gen_name: mariadb-java-client.jar

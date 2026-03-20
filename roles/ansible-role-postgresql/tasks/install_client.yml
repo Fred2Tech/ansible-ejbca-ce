@@ -1,0 +1,17 @@
+---
+
+- name: Install PostgreSQL client packages on Debian
+  ansible.builtin.package:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ postgresql_client_packages }}"
+  when:
+    - ansible_facts['os_family'] == 'Debian'
+
+- name: Install PostgreSQL client packages on RedHat
+  ansible.builtin.package:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ postgresql_client_packages }}"
+  when:
+    - ansible_facts['os_family'] == 'RedHat'

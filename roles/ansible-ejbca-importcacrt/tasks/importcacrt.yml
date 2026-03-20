@@ -1,0 +1,46 @@
+---
+
+# tasks file for importcacrt
+
+- name: Check if {{ item.caname }} is already in EJBCA
+  ansible.builtin.command: >
+    {{ ejbca_sh }} ca listcas
+  become: true
+  become_user: "{{ ejbca_user }}"
+  register: check_list_of_cas
+  until: check_list_of_cas.rc == 0 or check_list_of_cas.rc == 1
+  retries: 10
+  delay: 3
+  failed_when: check_list_of_cas.rc >= 2
+  changed_when: check_list_of_cas.rc == 0
+
+- name: Import CA if it is not in EJBCA
+  block:
+
+    - name: Create import directory
+      ansible.builtin.file:
+        path: /var/tmp/importca
+        state: directory
+        owner: "{{ ejbca_user }}"
+        group: "{{ ejbca_group }}"
+
+    - name: Upload {{ item.caname }} file to import
+      ansible.builtin.copy:
+        src: "{{ ejbca_cacrt_dir_output }}/{{ item.caname }}.crt"
+        dest: "/var/tmp/importca/{{ item.caname }}.crt"
+        owner: "{{ ejbca_user }}"
+        group: "{{ ejbca_group }}"
+
+    - name: Import {{ item.caname }}
+      ansible.builtin.command: >
+        {{ ejbca_sh }} ca importcacert
+        --caname {{ item.caname }}
+        -f /var/tmp/importca/{{ item.caname }}.crt 
+        {% if item.superadmincn is defined %}-initauthorization -superadmincn '{{ item.superadmincn }}' {% endif %}
+      become: true
+      become_user: "{{ ejbca_user }}"
+      register: import_external_ca
+      failed_when: import_external_ca.rc >= 2
+      changed_when: import_external_ca.rc == 0
+
+  when: item.caname not in check_list_of_cas.stdout

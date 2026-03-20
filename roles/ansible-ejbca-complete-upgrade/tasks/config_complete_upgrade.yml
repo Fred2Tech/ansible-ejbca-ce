@@ -1,0 +1,11 @@
+---
+
+- name: Complete EJBCA upgrade
+  ansible.builtin.command: ant upgrade
+  become: true
+  become_user: "{{ ejbca_user }}"
+  environment:
+    EJBCA_HOME: "{{ ejbca_home }}"
+  args:
+    chdir: "{{ ejbca_home }}"
+  register: ejbca_upgrade_result

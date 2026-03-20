@@ -1,0 +1,33 @@
+---
+# tasks file for roles/ansible-ejbca-crypto-token
+
+- block:
+    - name: Query keys on {% if key_item.0.crypto_token_name is defined %}"{{ key_item.0.crypto_token_name }}"{% else %}"{{ key_item.0.caname }}"{% endif %}
+      ansible.builtin.command: >
+        {{ ejbca_sh }} cryptotoken listkeys --token {% if key_item.0.crypto_token_name is defined %}"{{ key_item.0.crypto_token_name }}"{% else %}"{{ key_item.0.caname }}"{% endif %}
+      no_log: "{{ no_log_value }}"
+      become: true
+      become_user: "{{ ejbca_user }}"
+      register: check_cryptoToken_keys
+      until: check_cryptoToken_keys.rc == 0
+      retries: 10
+      delay: 3
+      changed_when: 'key_item.1.key_label not in check_cryptoToken_keys.stdout'
+
+    #- name: Debug check_cryptoToken_keys
+    #  ansible.builtin.debug:
+    #    var: check_cryptoToken_keys
+
+    - name: Generate key if it does not exist for {% if key_item.0.crypto_token_name is defined %}{{ key_item.0.crypto_token_name }}{% else %}{{ key_item.0.caname }}{% endif %} - {{ key_item.1.key_label }}:{{ key_item.1.key_size }}
+      ansible.builtin.command: >
+        {{ ejbca_sh }} cryptotoken generatekey 
+        --token {% if key_item.0.crypto_token_name is defined %}"{{ key_item.0.crypto_token_name }}"{% else %}"{{ key_item.0.caname }}"{% endif %} 
+        --alias {{ key_item.1.key_label }} 
+        --keyspec {{ key_item.1.key_size }}
+      become: true
+      become_user: "{{ ejbca_user }}"
+      register: add_key_to_cryptotoken
+      failed_when: add_key_to_cryptotoken.rc >= 2
+      when: check_cryptoToken_keys.changed
+  when:
+    - not ansible_check_mode

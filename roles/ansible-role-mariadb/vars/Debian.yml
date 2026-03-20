@@ -1,0 +1,18 @@
+---
+
+mariadb_packages:
+  - mariadb-client
+  - mariadb-common
+  - mariadb-server
+  - mariadb-backup
+  - python3-pymysql
+
+mariadb_client_packages:
+  - python3-pymysql
+
+mariadb_datadir: /var/lib/mysql
+mariadb_srv_socket: "{{ mariadb_socket | default('/run/mysqld/mysqld.sock') }}"
+
+mariadb_srv_config_network: "{{ mariadb_config_network | default('/etc/mysql/mariadb.conf.d/60-network.cnf') }}"
+mariadb_srv_config_server: "{{ mariadb_config_server | default('/etc/mysql/mariadb.conf.d/50-server.cnf') }}"
+mariadb_srv_config_custom: "{{ mariadb_config_custom | default('/etc/mysql/mariadb.conf.d/99-custom.cnf') }}"

@@ -1,0 +1,66 @@
+---
+
+- name: Task - Include distribution dependent variables
+  ansible.builtin.include_vars: "{{ item }}"
+  with_first_found:
+    - "{{ ansible_facts['distribution'] }}.yml"
+    - "{{ ansible_facts['os_family'] }}.yml"
+  tags: postgresql
+  when:
+    - database_engine == 'postgresql'
+
+- name: Task - Install PostgreSQL client only
+  ansible.builtin.include_tasks: install_client.yml
+  tags: postgresql
+  when:
+    - database_engine == 'postgresql'
+    - postgresql_install_client | bool
+
+- name: Block - Install PostgreSQL
+  block:
+    - name: Task - Install PostgreSQL server
+      ansible.builtin.include_tasks: install.yml
+
+    - name: Task - Configure PostgreSQL server
+      ansible.builtin.include_tasks: config.yml
+
+    - name: Gather PostgreSQL service facts for check mode
+      ansible.builtin.service_facts:
+      when: ansible_check_mode
+
+    - name: Start and enable PostgreSQL service
+      ansible.builtin.systemd_service:
+        name: "{{ postgresql_service }}"
+        state: started
+        enabled: true
+      when:
+        - not ansible_check_mode or ((postgresql_service ~ '.service') in ansible_facts.services)
+
+    - name: Flush PostgreSQL restart handlers
+      ansible.builtin.meta: flush_handlers
+      when:
+        - not ansible_check_mode
+
+    - name: Task - Create users in PostgreSQL
+      ansible.builtin.include_tasks: users.yml
+      when:
+        - postgresql_restore_cnf_files is not defined
+        - not ansible_check_mode
+
+    - name: Task - Create databases in PostgreSQL
+      ansible.builtin.include_tasks: databases.yml
+      when:
+        - postgresql_restore_cnf_files is not defined
+        - not ansible_check_mode
+
+    - name: Task - Restore DB from SQL
+      ansible.builtin.include_tasks: restore.yml
+      when:
+        - postgresql_restore_cnf_files is defined
+        - postgresql_restore_cnf_files | bool
+        - not ansible_check_mode
+
+  tags: postgresql
+  when:
+    - database_engine == 'postgresql'
+    - postgresql_install_server | bool

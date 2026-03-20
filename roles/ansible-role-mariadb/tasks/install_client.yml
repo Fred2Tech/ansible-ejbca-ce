@@ -1,0 +1,44 @@
+---
+
+- name: Install MariaDB client packages on Debian
+  ansible.builtin.package:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ mariadb_client_packages }}"
+  when:
+    - ansible_facts['os_family'] == 'Debian'
+
+- name: Install MariaDB client packages on RedHat 7
+  ansible.builtin.package:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ mariadb_client_packages }}"
+  when:
+    - ansible_facts['distribution'] == 'RedHat'
+    - ansible_facts['distribution_major_version'] == '7'
+
+- name: Install MariaDB client packages on Fedora
+  ansible.builtin.package:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ mariadb_client_packages }}"
+  when:
+    - ansible_facts['distribution'] == 'Fedora'
+
+- name: Install MariaDB client packages on RedHat family 8 and 9
+  ansible.builtin.package:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ mariadb_client_packages_8 | default(mariadb_client_packages) }}"
+  when:
+    - ansible_facts['distribution'] in ['RedHat', 'AlmaLinux', 'CentOS', 'OracleLinux', 'Rocky']
+    - ansible_facts['distribution_major_version'] in ['8', '9']
+
+- name: Install MariaDB client packages on RedHat family 10
+  ansible.builtin.package:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ mariadb_client_packages_10 | default(mariadb_client_packages_8 | default(mariadb_client_packages)) }}"
+  when:
+    - ansible_facts['distribution'] in ['RedHat', 'AlmaLinux']
+    - ansible_facts['distribution_major_version'] == '10'

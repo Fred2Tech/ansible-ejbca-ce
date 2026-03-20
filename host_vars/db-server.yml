@@ -1,0 +1,11 @@
+---
+# Example host_vars for a remote database node.
+# Copy this file, rename it to match your inventory alias, and fill in real values.
+
+# SSH connection
+ansible_host: <DB_SERVER_IP>
+ansible_user: "{{ lookup('env', 'PKI_ANSIBLE_USER') }}"
+ansible_ssh_private_key_file: ~/.ssh/ansible_pki
+
+# DB server FQDN — used by the database role for hostname configuration
+hostname: <db-server>.{{ domain_name }}

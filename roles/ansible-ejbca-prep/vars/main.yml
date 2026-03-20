@@ -1,0 +1,30 @@
+---
+# vars file for primekeyprep
+
+# List of repository packages that will be installed by this role
+ejbca_packages_8:
+  - unzip
+  - java-17-openjdk-devel
+  - nss-tools
+  - wget
+  - python3-libsemanage
+  - jq
+
+ejbca_packages_10:
+  - unzip
+  - java-21-openjdk-devel
+  - nss-tools
+  - wget
+  - python3-libsemanage
+  - jq
+
+ejbca_packages_7:
+  - unzip
+  - java-17-openjdk-devel
+  #- ant.noarch # Not using because we want Java 11
+  - nss-tools
+  - wget
+  - jq
+  - libsemanage-python
+
+pass_33: "{{ lookup('password', '/dev/null length=33 chars=ascii_letters') }}"

@@ -1,0 +1,51 @@
+---
+# Ansible inventory example
+# Copy this file to 'inventory' and replace placeholders with actual host names.
+# Connection parameters (ansible_host, ansible_user, etc.) go in host_vars/<host>.yml.
+
+all:
+  children:
+
+    # EJBCA Community nodes
+    ceServers:
+      hosts:
+        <pki-server>:        # local DB mode  (deployCeNode.yml)
+        # <pki-server-2>:    # additional node example
+
+    # MariaDB nodes (used when database_deployment_mode=remote + database_engine=mariadb)
+    mariadbServers:
+      hosts: {}
+        # <db-server>:
+
+    # PostgreSQL nodes (used when database_deployment_mode=remote + database_engine=postgresql)
+    postgresqlServers:
+      hosts: {}
+        # <db-server>:
+
+    # Optional: backup server
+    backupServer:
+      hosts: {}
+
+    # EJBCA Enterprise nodes (unused in CE-only deployments)
+    eeCaServers:
+      hosts: {}
+    eeRaServers:
+      hosts: {}
+    eeVaServers:
+      hosts: {}
+    eeSignServers:
+      hosts: {}
+    ceSignServers:
+      hosts: {}
+
+    # Derived groups — do not add hosts here directly
+    applicationServers:
+      children:
+        ceServers:
+    httpdServers:
+      children:
+        ceServers:
+    pkiServers:
+      children:
+        applicationServers:
+        httpdServers:

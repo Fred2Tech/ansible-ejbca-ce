@@ -1,0 +1,95 @@
+---
+
+- name: Check if EJBCA database exists
+  ansible.builtin.command: >
+    {{ ejbca_home }}/../clientToolBox/ejbcaClientToolBox.sh jdbc
+    {% if appsrv_datasources[0].loadbalancing is sameas false %}
+    --url jdbc:{{ appsrv_datasources[0].database_connection_type }}://{{ appsrv_datasources[0].host }}:{{ appsrv_datasources[0].port }}{% if appsrv_datasources[0].database_connection_type in ['mariadb', 'postgresql'] %}/{{ appsrv_datasources[0].database }}{% elif appsrv_datasources[0].database_connection_type == "sqlserver" %};DatabaseName={{ appsrv_datasources[0].database }}{{ appsrv_datasources[0].connection_parameters }}{% endif %}
+    {% else %}
+    --url jdbc:{{ appsrv_datasources[0].database_connection_type }}://{{ appsrv_datasources[0].loadbalanced_hosts[0].host }}:{{ appsrv_datasources[0].loadbalanced_hosts[0].port }}{% if appsrv_datasources[0].database_connection_type in ['mariadb', 'postgresql'] %}/{{ appsrv_datasources[0].database }}{% elif appsrv_datasources[0].database_connection_type == "sqlserver" %};DatabaseName={{ appsrv_datasources[0].database }}{{ appsrv_datasources[0].connection_parameters }}{% endif %}
+    {% endif %}
+    --username {{ appsrv_datasources[0].user }}
+    --password {{ appsrv_datasources[0].password }}
+    --execute "SELECT rowVersion FROM GlobalConfigurationData WHERE configurationId='UPGRADE';"
+  no_log: "{{ no_log_value }}"
+  become_user: "{{ ejbca_user }}"
+  become: true
+  register: check_ejbca_database_exists
+  failed_when: check_ejbca_database_exists.rc >= 5
+  changed_when: false
+
+- name: Debug check_ejbca_database_exists
+  ansible.builtin.debug:
+    var: check_ejbca_database_exists
+  when:
+    - check_ejbca_database_exists.rc >= 5
+
+- name: Create the EJBCA database tables and apply indexes
+  block:
+
+    - name: Create EJBCA database tables
+      ansible.builtin.command: >
+        {{ ejbca_home }}/../clientToolBox/ejbcaClientToolBox.sh jdbc 
+        --url jdbc:{{ appsrv_datasources[0].database_connection_type }}://{{ appsrv_datasources[0].host }}:{{ appsrv_datasources[0].port }}{% if appsrv_datasources[0].database_connection_type in ['mariadb', 'postgresql'] %}/{{ appsrv_datasources[0].database }}{% elif appsrv_datasources[0].database_connection_type == "sqlserver" %};DatabaseName={{ appsrv_datasources[0].database }}{{ appsrv_datasources[0].connection_parameters }}{% endif %} 
+        --username {{ appsrv_datasources[0].user }} 
+        --password {{ appsrv_datasources[0].password }}
+        --file {{ ejbca_home }}/doc/sql-scripts/create-tables-ejbca-{% if appsrv_datasources[0].database_connection_type == "mariadb" %}mysql{% elif appsrv_datasources[0].database_connection_type == "postgresql" %}postgres{% elif appsrv_datasources[0].database_connection_type == "sqlserver" %}mssql{% endif %}.sql
+      no_log: "{{ no_log_value }}"
+      become_user: "{{ ejbca_user }}"
+      become: true
+      register: create_ejbca_database
+      ignore_errors: true
+
+    - name: Debug create_ejbca_database
+      ansible.builtin.debug:
+        var: create_ejbca_database
+      when:
+        - create_ejbca_database.failed
+
+    - name: Prepare PostgreSQL-safe EJBCA index script
+      ansible.builtin.shell: |
+        sed \
+          -e 's/^CREATE UNIQUE INDEX /CREATE UNIQUE INDEX IF NOT EXISTS /' \
+          -e 's/^CREATE INDEX /CREATE INDEX IF NOT EXISTS /' \
+          -e 's/CREATE INDEX IF NOT EXISTS certificatedata_idx_san ON CertificateData (subjectAltName(750));/CREATE INDEX IF NOT EXISTS certificatedata_idx_san ON CertificateData (LEFT(subjectAltName, 750));/' \
+          {{ ejbca_home }}/doc/sql-scripts/create-index-ejbca.sql > {{ ejbca_home }}/doc/sql-scripts/create-index-ejbca-postgres.sql
+      args:
+        executable: /bin/bash
+      become_user: "{{ ejbca_user }}"
+      become: true
+      when:
+        - appsrv_datasources[0].database_connection_type == 'postgresql'
+
+    - name: Add EJBCA database indexes
+      ansible.builtin.command: >
+        {{ ejbca_home }}/../clientToolBox/ejbcaClientToolBox.sh jdbc 
+        --url jdbc:{{ appsrv_datasources[0].database_connection_type }}://{{ appsrv_datasources[0].host }}:{{ appsrv_datasources[0].port }}{% if appsrv_datasources[0].database_connection_type in ['mariadb', 'postgresql'] %}/{{ appsrv_datasources[0].database }}{% elif appsrv_datasources[0].database_connection_type == "sqlserver" %};DatabaseName={{ appsrv_datasources[0].database }}{{ appsrv_datasources[0].connection_parameters }}{% endif %} 
+        --username {{ appsrv_datasources[0].user }} 
+        --password {{ appsrv_datasources[0].password }}
+        {% if appsrv_datasources[0].database_connection_type == 'postgresql' and item.index == '--file ' ~ ejbca_home ~ '/doc/sql-scripts/create-index-ejbca.sql' %}
+        --file {{ ejbca_home }}/doc/sql-scripts/create-index-ejbca-postgres.sql
+        {% else %}
+        {{ item.index }}
+        {% endif %}
+      loop: "{{ ejbca_database_indexes }}" 
+      loop_control:
+        label: "{{ item }}"
+      no_log: "{{ no_log_value }}"
+      become_user: "{{ ejbca_user }}"
+      become: true
+      register: applying_database_indexes
+      failed_when: >-
+        applying_database_indexes.rc != 0 and
+        'already exists' not in ((applying_database_indexes.stdout | default('')) ~ ' ' ~ (applying_database_indexes.stderr | default('')) ~ ' ' ~ (applying_database_indexes.msg | default('')))
+      changed_when: >-
+        applying_database_indexes.rc == 0
+
+    - name: Log the Index errors 
+      ansible.builtin.debug:
+        #msg: "Some part of applying database indexes failed with message: {{ applying_database_indexes.stderr }}"
+        var: applying_database_indexes
+        verbosity: 4
+      when:
+        - applying_database_indexes is failed
+  when: 
+    - check_ejbca_database_exists.rc == 3

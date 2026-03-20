@@ -1,0 +1,16 @@
+---
+
+- name: Import profiles into EJBCA using CLI
+  ansible.builtin.command: "{{ ejbca_sh }} ca importprofiles {{ import_profile_dir }}"
+  args:
+    chdir: "{{ ejbca_home }}"
+  become_user: "{{ ejbca_user }}"
+  become: true
+  register: cli_importprofiles_result
+  tags: cli-profile-import
+  failed_when: cli_importprofiles_result.rc >= 2 or (cli_importprofiles_result.rc == 1 and 'already exist in database' not in cli_importprofiles_result.stdout)
+  changed_when: "'Added certificate profile' in cli_importprofiles_result.stdout"
+
+#- name: Debug cli_importprofiles_result
+#  ansible.builtin.debug:
+#    var: cli_importprofiles_result

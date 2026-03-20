@@ -1,0 +1,52 @@
+---
+
+- name: Stage Apache HTTPD certificate files
+  block:
+
+    - name: Create TLS certificate directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: 0755
+      loop:
+        - "{{ httpd_tls_cert_dir }}"
+        - "{{ httpd_tls_private_dir }}"
+
+    - name: Ensure trusted CA bundle file exists
+      ansible.builtin.file:
+        path: "{{ httpd_trusted_ca_file }}"
+        state: touch
+        owner: root
+        group: root
+        mode: 0644
+
+    - name: Copy certificate files from the Ansible controller
+      ansible.builtin.copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: root
+        group: root
+      loop: "{{ httpd_cert_files }}"
+      loop_control: 
+        label: "{{ item.src }}"
+      register: file_copy
+
+    - name: Copy the CA chain files from the Ansible Controller
+      ansible.builtin.copy:
+        src: "{{ ejbca_cacrt_dir_output }}/{{ item.caname }}-fullchain.crt"
+        dest: "{{ httpd_tls_cert_dir }}/{{ item.caname }}-fullchain.crt"
+        owner: root
+        group: root
+      loop: "{{ httpd_trusted_cas }}"
+      loop_control:
+        label: "{{ item.caname }}"
+      register: file_copy_ca_chain
+      
+    - name: Add CA certificates to the trusted-ca.crt file
+      ansible.builtin.shell: >
+        cat {{ httpd_tls_cert_dir }}/{{ item.caname }}-fullchain.crt >> {{ httpd_trusted_ca_file }}
+      loop: "{{ httpd_trusted_cas }}"
+      loop_control:
+        label: "{{ item.caname }}"

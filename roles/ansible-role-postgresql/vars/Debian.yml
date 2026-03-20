@@ -1,0 +1,10 @@
+---
+
+postgresql_packages:
+  - postgresql
+  - postgresql-client
+  - python3-psycopg2
+
+postgresql_client_packages:
+  - postgresql-client
+  - python3-psycopg2

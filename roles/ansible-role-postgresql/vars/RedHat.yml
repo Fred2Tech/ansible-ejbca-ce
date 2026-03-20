@@ -1,0 +1,16 @@
+---
+
+postgresql_packages:
+  - postgresql
+  - postgresql-server
+  - python3-psycopg2
+
+postgresql_client_packages:
+  - postgresql
+  - python3-psycopg2
+
+postgresql_service: postgresql
+postgresql_data_dir: /var/lib/pgsql/data
+postgresql_conf_dir: /var/lib/pgsql/data
+postgresql_initdb_command: /usr/bin/postgresql-setup --initdb
+postgresql_login_unix_socket: /var/run/postgresql
