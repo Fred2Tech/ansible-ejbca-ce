@@ -1,0 +1,83 @@
+---
+# tasks file for roles/ansible-ejbca-code-signing
+
+- name: Create code signing profile import directory
+  ansible.builtin.file:
+    path: "{{ code_signing_import_dir }}"
+    state: directory
+    mode: '0755'
+    owner: "{{ 'root' if ansible_check_mode else ejbca_user }}"
+    group: "{{ 'root' if ansible_check_mode else ejbca_group }}"
+  tags: code-signing
+
+- name: Prepare the code signing certificate profile file
+  ansible.builtin.template:
+    src: certprofile_CodeSigning.xml.j2
+    dest: "{{ code_signing_import_dir }}/certprofile_{{ code_signing_profile_name }}-{{ code_signing_profile_id }}.xml"
+    owner: "{{ 'root' if ansible_check_mode else ejbca_user }}"
+    group: "{{ 'root' if ansible_check_mode else ejbca_group }}"
+    mode: '0664'
+  tags: code-signing
+
+- name: Import the code signing certificate profile into EJBCA
+  ansible.builtin.command: "{{ ejbca_sh }} ca importprofiles {{ code_signing_import_dir }}"
+  args:
+    chdir: "{{ ejbca_home }}"
+  become: true
+  become_user: "{{ ejbca_user }}"
+  register: code_signing_import_result
+  failed_when: >-
+    code_signing_import_result.rc >= 2 or
+    (code_signing_import_result.rc == 1 and 'already exist in database' not in code_signing_import_result.stdout)
+  changed_when: "'Added certificate profile' in code_signing_import_result.stdout"
+  when: not ansible_check_mode
+  tags: code-signing
+
+- name: Check which code signing end entities already exist
+  ansible.builtin.command: "{{ ejbca_sh }} ra findendentity {{ item.username }}"
+  args:
+    chdir: "{{ ejbca_home }}"
+  become: true
+  become_user: "{{ ejbca_user }}"
+  register: code_signing_ee_exists
+  changed_when: false
+  failed_when: false
+  loop: "{{ code_signing_end_entities }}"
+  loop_control:
+    label: "{{ item.username }}"
+  when: not ansible_check_mode
+  tags: code-signing
+
+- name: Add the code signing end entities
+  ansible.builtin.command: >
+    {{ ejbca_sh }} ra addendentity
+    --username '{{ item.item.username }}'
+    --password '{{ item.item.password }}'
+    --dn '{{ item.item.dn }}'
+    --caname '{{ code_signing_ca_name }}'
+    --type 1
+    --token {{ item.item.token | default('P12') }}
+    --certprofile '{{ code_signing_profile_name }}'
+    --eeprofile '{{ code_signing_end_entity_profile }}'
+  args:
+    chdir: "{{ ejbca_home }}"
+  become: true
+  become_user: "{{ ejbca_user }}"
+  register: code_signing_ee_add
+  changed_when: code_signing_ee_add.rc == 0
+  no_log: "{{ no_log_value }}"
+  loop: "{{ code_signing_ee_exists.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.username }}"
+  when:
+    - not ansible_check_mode
+    - item.rc != 0 or 'does not exist' in ((item.stdout | default('')) ~ (item.stderr | default('')))
+  tags: code-signing
+
+- name: Show how to enroll
+  ansible.builtin.debug:
+    msg:
+      - "Code signing profile '{{ code_signing_profile_name }}' is ready, issued by CA '{{ code_signing_ca_name }}'."
+      - "Enroll at https://{{ pki_server_fqdn }}/ejbca/ra/ with 'Enroll' > 'Use Username'."
+      - "Usernames: {{ code_signing_end_entities | map(attribute='username') | join(', ') }}"
+  tags: code-signing

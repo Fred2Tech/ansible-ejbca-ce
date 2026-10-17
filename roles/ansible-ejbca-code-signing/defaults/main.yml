@@ -1,0 +1,24 @@
+---
+# defaults file for roles/ansible-ejbca-code-signing
+
+# Certificate profile created in EJBCA (the id only needs to be unique in the profile store)
+code_signing_profile_name: CodeSigning
+code_signing_profile_id: 1857300412
+code_signing_validity: 1y
+
+# CA that issues the code signing certificates
+code_signing_ca_name: "{{ sub_ca_name }}"
+
+# Directory used to stage the profile file before importing it
+code_signing_import_dir: "{{ ejbca_home }}/imports/codesigning"
+
+# End entity profile used for the end entities below
+code_signing_end_entity_profile: EMPTY
+
+# End entities (signers) to create. Each one can then enroll from the RA web
+# with its username and enrollment code. token: P12 | PEM | JKS | USERGENERATED
+code_signing_end_entities:
+  - username: "{{ organizationName }}-CodeSigner"
+    password: "{{ pki_env_codesigning_enrollment_code }}"
+    dn: "C={{ countryName }},O={{ organizationName }},OU=Code Signers,CN={{ organizationName }} Code Signing"
+    token: P12

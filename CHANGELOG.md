@@ -6,6 +6,7 @@ French version: [CHANGELOG.fr.md](CHANGELOG.fr.md)
 
 ### Added
 
+- `deployCodeSigning.yml` and role `ansible-ejbca-code-signing`: imports a `CodeSigning` certificate profile (EKU Code Signing, RSA 3072/4096, SHA-256) and creates signer end entities that enroll from the RA web with username and enrollment code. New variable `PKI_CODESIGNING_ENROLLMENT_CODE` (`.env.example`, `group_vars/all.yml`). Documented in `README.md` / `README.fr.md`. Not yet validated on a live node.
 - `README.md` / `README.fr.md`: new "Deployment checklist (step by step)" section (Ansible node, target node, pre-flight, deployment command, post-deployment verification).
 - `.env.example`: template referenced by the documentation but missing from the repository.
 - `host_vars/test_pki-server.yml` and `test_pki-server` entry in `inventory`: test node `192.168.210.50` (EJBCA + MariaDB on the same host).

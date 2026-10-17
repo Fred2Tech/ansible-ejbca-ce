@@ -190,6 +190,48 @@ Add `--ask-become-pass` if sudo requires a password.
 - [ ] CAs listed: `sudo -u wildfly /opt/ejbca/bin/ejbca.sh ca listcas`
 - [ ] Re-run the playbook once: it must be idempotent (no failure)
 
+## Code signing certificates (PowerShell scripts and applications)
+
+`deployCodeSigning.yml` prepares EJBCA to issue Authenticode code signing certificates. Run it after `deployCeNode.yml` (the Sub CA must exist):
+
+```bash
+./scripts/with-env.sh ansible-playbook -i inventory -l <pki-server> deployCodeSigning.yml
+```
+
+It performs the following (role `ansible-ejbca-code-signing`):
+
+- imports the certificate profile `CodeSigning` (RSA 3072/4096, SHA-256, key usage `digitalSignature`, extended key usage `Code Signing`, validity `1y`, no subject alternative name)
+- creates one signer end entity (default `<PKI_ORGANIZATION_NAME>-CodeSigner`) on the Sub CA, with the enrollment code `PKI_CODESIGNING_ENROLLMENT_CODE` (falls back to `PKI_DEFAULT_SECRET_VALUE`)
+
+Customise with variables (see `roles/ansible-ejbca-code-signing/defaults/main.yml`): `code_signing_validity`, `code_signing_ca_name`, `code_signing_end_entities` (list of `username`, `password`, `dn`, `token`).
+
+To get a certificate:
+
+1. Open `https://<pki-server>.domain.local/ejbca/ra/` and choose **Enroll**, then **Use Username**.
+2. Enter the username and the enrollment code, pick the key algorithm, and download the P12 (its password is the enrollment code).
+3. Import the P12 in the Windows store *Current User > Personal*.
+
+On the Windows machines that must trust the signature:
+
+1. Import the Root CA and Sub CA certificates (folder `ejbcaCaCerts` on the Ansible node) in *Trusted Root Certification Authorities* and *Intermediate Certification Authorities*.
+2. Import the signer certificate in *Trusted Publishers* if you use the `AllSigned` execution policy.
+
+Signing examples:
+
+```powershell
+$cert = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Select-Object -First 1
+Set-AuthenticodeSignature -FilePath .\script.ps1 -Certificate $cert
+Get-AuthenticodeSignature .\script.ps1
+
+signtool sign /fd SHA256 /sha1 <thumbprint> app.exe
+```
+
+Notes:
+
+- the signer end entity uses the built-in `EMPTY` end entity profile. If `ra addendentity` is refused because `CodeSigning` is not among the available certificate profiles, create an end entity profile in the Admin UI (*End Entity Profiles*) that allows `CodeSigning` and the Sub CA, then set `code_signing_end_entity_profile` to its name
+- without a timestamp, signatures stop being valid when the certificate expires; add a timestamp server (`-TimestampServer` / `/tr`) if you need long-lived signatures
+- this deployment has not been validated yet on a live node
+
 ## Remote database scenario
 
 This `ansible_ejbca-ce` copy supports two main modes:

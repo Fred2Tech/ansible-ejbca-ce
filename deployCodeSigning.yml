@@ -1,0 +1,12 @@
+---
+
+# Creates the code signing certificate profile and the signer end entities.
+# Run after deployCeNode.yml (the Sub CA must exist).
+#
+# ./scripts/with-env.sh ansible-playbook -i inventory -l <pki-server> deployCodeSigning.yml
+
+- hosts: pkiServers
+  become: true
+  become_method: sudo
+  roles:
+    - ansible-ejbca-code-signing

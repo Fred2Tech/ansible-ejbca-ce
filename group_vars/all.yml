@@ -31,6 +31,7 @@ pki_env_ejbca_cli_password: "{{ lookup('ansible.builtin.env', 'PKI_EJBCA_CLI_PAS
 pki_env_ejbca_cms_keystore_password: "{{ lookup('ansible.builtin.env', 'PKI_EJBCA_CMS_KEYSTORE_PASSWORD') | default('ejbca', true) }}"
 pki_env_httpd_identity_password: "{{ lookup('ansible.builtin.env', 'PKI_HTTPD_IDENTITY_PASSWORD') | default(pki_env_default_secret_value, true) }}"
 pki_env_superadmin_enrollment_code: "{{ lookup('ansible.builtin.env', 'PKI_SUPERADMIN_ENROLLMENT_CODE') | default(pki_env_default_secret_value, true) }}"
+pki_env_codesigning_enrollment_code: "{{ lookup('ansible.builtin.env', 'PKI_CODESIGNING_ENROLLMENT_CODE') | default(pki_env_default_secret_value, true) }}"
 pki_env_mgmtca_token_pin: "{{ lookup('ansible.builtin.env', 'PKI_MGMTCA_TOKEN_PIN') | default(pki_env_default_secret_value, true) }}"
 pki_env_rootca_token_pin: "{{ lookup('ansible.builtin.env', 'PKI_ROOTCA_TOKEN_PIN') | default(pki_env_default_secret_value, true) }}"
 pki_env_subca_token_pin: "{{ lookup('ansible.builtin.env', 'PKI_SUBCA_TOKEN_PIN') | default(pki_env_default_secret_value, true) }}"
