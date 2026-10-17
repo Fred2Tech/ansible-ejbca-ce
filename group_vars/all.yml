@@ -7,9 +7,9 @@ ansible_ssh_pipelining: true
 no_log_value: true
 
 # Use scripts/with-env.sh to load .env variables
-pki_env_domain_name: "{{ lookup('ansible.builtin.env', 'PKI_DOMAIN_NAME') | default('fenetre2000.local', true) }}"
+pki_env_domain_name: "{{ lookup('ansible.builtin.env', 'PKI_DOMAIN_NAME') | default('domain.local', true) }}"
 pki_env_database_name: "{{ lookup('ansible.builtin.env', 'PKI_DATABASE_NAME') | default('ejbca', true) }}"
-pki_env_organization_name: "{{ lookup('ansible.builtin.env', 'PKI_ORGANIZATION_NAME') | default('Fenetre2000', true) }}"
+pki_env_organization_name: "{{ lookup('ansible.builtin.env', 'PKI_ORGANIZATION_NAME') | default('Organization', true) }}"
 pki_env_organization_short_name: "{{ lookup('ansible.builtin.env', 'PKI_ORGANIZATION_SHORT_NAME') | default(pki_env_organization_name, true) }}"
 pki_env_organization_crl_name: "{{ lookup('ansible.builtin.env', 'PKI_ORGANIZATION_CRL_NAME') | default(pki_env_organization_name, true) }}"
 pki_env_country_name: "{{ lookup('ansible.builtin.env', 'PKI_COUNTRY_NAME') | default('BE', true) }}"
@@ -17,10 +17,10 @@ pki_env_management_ca_name: "{{ lookup('ansible.builtin.env', 'PKI_MANAGEMENT_CA
 pki_env_root_ca_name: "{{ lookup('ansible.builtin.env', 'PKI_ROOT_CA_NAME') | default(pki_env_organization_short_name ~ '-Root-CA', true) }}"
 pki_env_sub_ca_name: "{{ lookup('ansible.builtin.env', 'PKI_SUB_CA_NAME') | default(pki_env_organization_short_name ~ '-Sub-CA', true) }}"
 pki_env_superadmin_cn: "{{ lookup('ansible.builtin.env', 'PKI_SUPERADMIN_CN') | default(pki_env_organization_name ~ '-Keyfactor-SA', true) }}"
-pki_env_healthcheck_authorized_ips_csv: "{{ lookup('ansible.builtin.env', 'PKI_HEALTHCHECK_AUTHORIZED_IPS') | default('127.0.0.1,::1,0:0:0:0:0:0:0:1,192.168.59.153', true) }}"
-pki_env_remote_user: "{{ lookup('ansible.builtin.env', 'PKI_ANSIBLE_USER') | default('fenetre2000', true) }}"
-pki_env_remote_group: "{{ lookup('ansible.builtin.env', 'PKI_REMOTE_GROUP') | default('fenetre2000', true) }}"
-pki_env_supplement_groups: "{{ lookup('ansible.builtin.env', 'PKI_SUPPLEMENT_GROUPS') | default('fenetre2000,softhsm', true) }}"
+pki_env_healthcheck_authorized_ips_csv: "{{ lookup('ansible.builtin.env', 'PKI_HEALTHCHECK_AUTHORIZED_IPS') | default('127.0.0.1,::1,0:0:0:0:0:0:0:1', true) }}"
+pki_env_remote_user: "{{ lookup('ansible.builtin.env', 'PKI_ANSIBLE_USER') | default('ansible-user', true) }}"
+pki_env_remote_group: "{{ lookup('ansible.builtin.env', 'PKI_REMOTE_GROUP') | default('ansible-user', true) }}"
+pki_env_supplement_groups: "{{ lookup('ansible.builtin.env', 'PKI_SUPPLEMENT_GROUPS') | default('ansible-user,softhsm', true) }}"
 pki_env_app_user: "{{ lookup('ansible.builtin.env', 'PKI_APP_USER') | default('wildfly', true) }}"
 pki_env_app_group: "{{ lookup('ansible.builtin.env', 'PKI_APP_GROUP') | default('wildfly', true) }}"
 pki_env_default_secret_value: "{{ lookup('ansible.builtin.env', 'PKI_DEFAULT_SECRET_VALUE') | default('foo123', true) }}"
@@ -189,18 +189,18 @@ ejbca_crl_dir:
   - /opt/web/AIA
 
 # Apache Ant
-apache_ant_remote_dir: ~/Downloads/PK-Software/apache-ant-1.10.15-bin.tar.gz
-ant_version: apache-ant-1.10.15-bin.tar.gz
-ant_url: "https://mirror.olnevhost.net/pub/apache/ant/binaries/{{ ant_version }}" 
-ant_checksum: sha256:71334d7e5d98cfe53d6c429a648a5021137a967378667306c5f613dff5180506
+apache_ant_remote_dir: ~/Downloads/PK-Software/apache-ant-1.10.18-bin.tar.gz
+ant_version: apache-ant-1.10.18-bin.tar.gz
+ant_url: "https://archive.apache.org/dist/ant/binaries/{{ ant_version }}"
+ant_checksum: sha256:b45db2fdd76d639301550930d33dd7bc672c9d4fdea0fe8cfd2e6a3518388d59
 
 # MariaDB JDBC driver
-mariadb_jdbc_driver: https://dlm.mariadb.com/4174416/Connectors/java/connector-java-3.5.2/mariadb-java-client-3.5.2.jar
-mariadb_jdbc_driver_checksum: sha256:f2f3c3c1a3bdaca69dd1d4e1cd8aed075242fc72ae41463ddb82e367b388f6ad
+mariadb_jdbc_driver: https://repo1.maven.org/maven2/org/mariadb/jdbc/mariadb-java-client/3.5.10/mariadb-java-client-3.5.10.jar
+mariadb_jdbc_driver_checksum: sha256:919b8c1c771d9ee3465811462f242c9543ab401e140c64988ddbf1d8abcb18b2
 
 # PostgreSQL JDBC driver
-postgresql_jdbc_driver: https://jdbc.postgresql.org/download/postgresql-42.7.5.jar
-postgresql_jdbc_driver_checksum: ""
+postgresql_jdbc_driver: https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.14/postgresql-42.7.14.jar
+postgresql_jdbc_driver_checksum: sha256:73914527305a40cce504b0d3d90b23caf565136912d607ae8ae7c5895512332c
 
 ejbca_jdbc_driver: "{{ postgresql_jdbc_driver if database_engine == 'postgresql' else mariadb_jdbc_driver }}"
 ejbca_jdbc_driver_checksum: "{{ postgresql_jdbc_driver_checksum if database_engine == 'postgresql' else mariadb_jdbc_driver_checksum }}"

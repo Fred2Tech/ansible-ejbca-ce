@@ -1,2 +1,9 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Always keep LF endings (these files are executed or sourced on Linux)
+*.sh text eol=lf
+.env text eol=lf
+.env.example text eol=lf
+*.yml text eol=lf
+*.j2 text eol=lf

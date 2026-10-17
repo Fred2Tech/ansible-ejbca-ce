@@ -38,12 +38,15 @@
       - wildfly_manage_service
       - not ansible_check_mode or 'wildfly' in ansible_facts.services or 'wildfly.service' in ansible_facts.services
 
+  # The .isdeploying marker only exists for a few seconds, so it may already be gone: do not fail on it.
+  # The final deployed/failed checks below are the authoritative ones.
   - name: Wait for EJBCA EAR file to start redeploying
     ansible.builtin.wait_for:
       path: "{{ wildfly_home }}/standalone/deployments/ejbca.ear.isdeploying"
       state: present
-      delay: 10
-      timeout: 180
+      delay: 0
+      timeout: 60
+    failed_when: false
     when:
       - wildfly_manage_service
       - not ansible_check_mode
@@ -63,4 +66,19 @@
   when:
     - checking_existing_keys is defined and checking_existing_keys.changed or restart_wildfly is defined and restart_wildfly|bool
     - not ansible_check_mode
+
+- name: Check that EJBCA EAR deployment did not fail
+  ansible.builtin.stat:
+    path: "{{ wildfly_home }}/standalone/deployments/ejbca.ear.failed"
+  register: ejbca_failed_after_deploy
+  when:
+    - checking_existing_keys is defined and checking_existing_keys.changed or restart_wildfly is defined and restart_wildfly|bool
+    - not ansible_check_mode
+
+- name: Fail if EJBCA EAR deployment failed
+  ansible.builtin.fail:
+    msg: "EJBCA deployment failed, see {{ wildfly_home }}/standalone/deployments/ejbca.ear.failed and {{ wildfly_home }}/standalone/log/server.log"
+  when:
+    - ejbca_failed_after_deploy.stat is defined
+    - ejbca_failed_after_deploy.stat.exists | default(false)
   

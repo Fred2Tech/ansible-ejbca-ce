@@ -56,13 +56,13 @@ mariadb_server_cnf:
 mariadb_custom_cnf: {}
 
 # Maria DB JDBC driver download URL for EjBCA
-ejbca_jdbc_driver: https://dlm.mariadb.com/4174416/Connectors/java/connector-java-3.5.2/mariadb-java-client-3.5.2.jar
+ejbca_jdbc_driver: https://repo1.maven.org/maven2/org/mariadb/jdbc/mariadb-java-client/3.5.10/mariadb-java-client-3.5.10.jar
 # Maria DB JDBC driver SHA256 hash
-ejbca_jdbc_driver_checksum: sha256:f2f3c3c1a3bdaca69dd1d4e1cd8aed075242fc72ae41463ddb82e367b388f6ad
+ejbca_jdbc_driver_checksum: sha256:919b8c1c771d9ee3465811462f242c9543ab401e140c64988ddbf1d8abcb18b2
 
 # Maria DB JDBC driver download URL for SignServer
-signsrv_jdbc_driver: https://dlm.mariadb.com/4174416/Connectors/java/connector-java-3.5.2/mariadb-java-client-3.5.2.jar
+signsrv_jdbc_driver: https://repo1.maven.org/maven2/org/mariadb/jdbc/mariadb-java-client/3.5.10/mariadb-java-client-3.5.10.jar
 # Maria DB JDBC driver SHA256 hash
-signsrv_jdbc_driver_checksum: sha256:f2f3c3c1a3bdaca69dd1d4e1cd8aed075242fc72ae41463ddb82e367b388f6ad
+signsrv_jdbc_driver_checksum: sha256:919b8c1c771d9ee3465811462f242c9543ab401e140c64988ddbf1d8abcb18b2
 # Generic file name for JDBC file
 signsrv_jdbc_gen_name: mariadb-java-client.jar

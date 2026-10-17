@@ -139,6 +139,57 @@ Summary of all points to verify before running a playbook. Tick each row before 
 | 21 | Ansible ping to DB node *(remote mode only)* | `ansible -i inventory <db-server> -m ping` | `pong` |
 | 22 | sudo elevation works | `ansible -i inventory <pki-server> -b -m command -a "id"` | `uid=0(root)` |
 
+## Deployment checklist (step by step)
+
+End-to-end order of operations for a first deployment. Details for each step are in the sections below. Example used: node `test_pki-server` (`192.168.210.50`), EJBCA + MariaDB on the same host, controlled from the Ansible node.
+
+### 1. Ansible node
+
+- [ ] Repository copied and `scripts/*.sh` executable (`chmod +x scripts/*.sh`; if copied from Windows: `sed -i 's/\r$//' scripts/*.sh`)
+- [ ] `ansible-core` installed, then `./scripts/update-galaxy-deps.sh`
+- [ ] `.env` created: `cp .env.example .env`, then **change every `change-me` value**
+- [ ] `PKI_ANSIBLE_USER` and `PKI_REMOTE_GROUP` set in `.env` (otherwise `host_vars` resolve to an empty user)
+- [ ] `PKI_HEALTHCHECK_AUTHORIZED_IPS` includes the Ansible node and the PKI node IPs (the default contains a hardcoded IP from another network)
+- [ ] `inventory` contains the node under `ceServers` (`inventory.example` as a template)
+- [ ] `host_vars/<node>.yml` created (`ansible_host`, `pki_server_name` with hyphens only, no underscore)
+- [ ] SSH key `~/.ssh/ansible_pki` created and copied to the target (`ssh-copy-id`)
+
+### 2. Target node
+
+- [ ] OS supported (Debian 13, Ubuntu 24.04, AlmaLinux/Rocky/RHEL 10)
+- [ ] User `PKI_ANSIBLE_USER` exists, can log in with the key, and has full `sudo` (see "sudo privileges")
+- [ ] `python3`, `sudo`, `openssh-server` installed
+- [ ] FQDN `<pki_server_name>.<PKI_DOMAIN_NAME>` resolves (DNS or `/etc/hosts`)
+- [ ] Outbound Internet access (GitHub, Maven Central, Apache archive, WildFly/Galleon)
+- [ ] Ports `80`, `443`, `8080`, `8443`, `9990`, `9993` and `3306` free
+- [ ] At least 5 GB free in `/opt`, clock synchronised
+
+### 3. Pre-flight from the Ansible node
+
+- [ ] `./scripts/with-env.sh ansible -i inventory <node> -m ping` returns `pong`
+- [ ] `./scripts/with-env.sh ansible -i inventory <node> -b -m command -a "id"` returns `uid=0(root)`
+- [ ] Syntax check passes: `./scripts/with-env.sh ansible-playbook -i inventory -l <node> --syntax-check deployCeNode.yml`
+
+### 4. Deployment
+
+`group_vars/all.yml` defaults to `database_engine=postgresql` and `database_deployment_mode=remote`, so always pass the engine and mode explicitly for a local MariaDB install:
+
+```bash
+./scripts/with-env.sh ansible-playbook -i inventory -l <node> deployCeNode.yml -e 'database_engine=mariadb database_deployment_mode=local'
+```
+
+Add `--ask-become-pass` if sudo requires a password.
+
+### 5. Post-deployment verification
+
+- [ ] Playbook ended with `failed=0`
+- [ ] On the target: `systemctl is-active mariadb wildfly httpd` (`apache2` on Debian/Ubuntu) all return `active`
+- [ ] `ss -tlnp | egrep ':443|:8080|:8443|:3306'` shows the expected listeners
+- [ ] `curl -kI https://<fqdn>/ejbca/ra/` answers (add the FQDN to `/etc/hosts` on your workstation if needed)
+- [ ] SuperAdmin P12 retrieved from the controller output directory and imported in the browser to access `https://<fqdn>/ejbca/adminweb/`
+- [ ] CAs listed: `sudo -u wildfly /opt/ejbca/bin/ejbca.sh ca listcas`
+- [ ] Re-run the playbook once: it must be idempotent (no failure)
+
 ## Remote database scenario
 
 This `ansible_ejbca-ce` copy supports two main modes:
@@ -238,10 +289,12 @@ The following are the main versions targeted or observed on the PKI server.
 - Debian Java package used : `default-jdk-headless` version `2:1.21-76`
 - Debian OpenJDK package : `openjdk-21-jdk-headless` version `21.0.10+7-1~deb13u1`
 - MariaDB server : `11.8.3-0+deb13u1`
-- PostgreSQL JDBC driver configured : `42.7.5`
+- PostgreSQL JDBC driver configured : `42.7.14`
 - SoftHSM : `2.6.1-3`
-- Apache Ant : `1.10.15`
-- MariaDB JDBC driver : `3.5.2`
+- Apache Ant : `1.10.18`
+- MariaDB JDBC driver : `3.5.10`
+
+Note: the Ant and JDBC driver versions (and their SHA256 checksums) were updated in `group_vars/all.yml` and `group_vars/mariadbServers.yml`. The JDBC drivers are now downloaded from Maven Central and Ant from `archive.apache.org`. These updates have not yet been re-validated by a full deployment. EJBCA CE (`9.3.7`), WildFly (`35.0.1.Final`) and Galleon (`6.0.5`) are intentionally kept: EJBCA CE 9.6 requires Enterprise Edition for HSM crypto tokens, and WildFly 41 requires reviewing the `standalone` template.
 
 Useful information:
 

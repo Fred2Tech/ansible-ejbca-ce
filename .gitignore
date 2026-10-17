@@ -1,4 +1,5 @@
 inventory
+.env
 note.txt
 host_vars/db01.yml
 host_vars/db02.yml
@@ -10,3 +11,4 @@ host_vars/pki02.yml
 host_vars/pki03.yml
 host_vars/pki04.yml
 host_vars/pki05.yml
+host_vars/test_pki-server.yml

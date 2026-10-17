@@ -139,6 +139,57 @@ Tableau recapitulatif des points a valider avant de lancer un playbook. Cocher c
 | 21 | Ping Ansible vers le noeud DB *(remote uniquement)* | `ansible -i inventory <db-server> -m ping` | `pong` |
 | 22 | Elevation sudo fonctionne | `ansible -i inventory <pki-server> -b -m command -a "id"` | `uid=0(root)` |
 
+## Checklist de deploiement (pas a pas)
+
+Ordre complet des operations pour un premier deploiement. Le detail de chaque etape se trouve dans les sections suivantes. Exemple utilise: noeud `test_pki-server` (`192.168.210.50`), EJBCA + MariaDB sur la meme machine, pilote depuis le poste Ansible.
+
+### 1. Poste Ansible
+
+- [ ] Depot copie et `scripts/*.sh` executables (`chmod +x scripts/*.sh`; si copie depuis Windows: `sed -i 's/\r$//' scripts/*.sh`)
+- [ ] `ansible-core` installe, puis `./scripts/update-galaxy-deps.sh`
+- [ ] `.env` cree: `cp .env.example .env`, puis **changer toutes les valeurs `change-me`**
+- [ ] `PKI_ANSIBLE_USER` et `PKI_REMOTE_GROUP` renseignes dans `.env` (sinon les `host_vars` donnent un utilisateur vide)
+- [ ] `PKI_HEALTHCHECK_AUTHORIZED_IPS` contient les IP du poste Ansible et du noeud PKI (la valeur par defaut contient une IP en dur d'un autre reseau)
+- [ ] `inventory` contient le noeud sous `ceServers` (modele: `inventory.example`)
+- [ ] `host_vars/<noeud>.yml` cree (`ansible_host`, `pki_server_name` avec des tirets uniquement, pas d'underscore)
+- [ ] Cle SSH `~/.ssh/ansible_pki` creee et copiee sur la cible (`ssh-copy-id`)
+
+### 2. Machine cible
+
+- [ ] OS supporte (Debian 13, Ubuntu 24.04, AlmaLinux/Rocky/RHEL 10)
+- [ ] L'utilisateur `PKI_ANSIBLE_USER` existe, se connecte avec la cle et dispose de `sudo` complet (voir « Privileges sudo »)
+- [ ] `python3`, `sudo`, `openssh-server` installes
+- [ ] Le FQDN `<pki_server_name>.<PKI_DOMAIN_NAME>` se resout (DNS ou `/etc/hosts`)
+- [ ] Acces Internet sortant (GitHub, Maven Central, archive Apache, WildFly/Galleon)
+- [ ] Ports `80`, `443`, `8080`, `8443`, `9990`, `9993` et `3306` libres
+- [ ] Au moins 5 Go libres dans `/opt`, horloge synchronisee
+
+### 3. Pre-controle depuis le poste Ansible
+
+- [ ] `./scripts/with-env.sh ansible -i inventory <noeud> -m ping` repond `pong`
+- [ ] `./scripts/with-env.sh ansible -i inventory <noeud> -b -m command -a "id"` repond `uid=0(root)`
+- [ ] Controle de syntaxe OK: `./scripts/with-env.sh ansible-playbook -i inventory -l <noeud> --syntax-check deployCeNode.yml`
+
+### 4. Deploiement
+
+`group_vars/all.yml` utilise par defaut `database_engine=postgresql` et `database_deployment_mode=remote`. Pour une installation MariaDB locale, il faut donc toujours passer le moteur et le mode explicitement:
+
+```bash
+./scripts/with-env.sh ansible-playbook -i inventory -l <noeud> deployCeNode.yml -e 'database_engine=mariadb database_deployment_mode=local'
+```
+
+Ajouter `--ask-become-pass` si sudo demande un mot de passe.
+
+### 5. Verification apres deploiement
+
+- [ ] Le playbook se termine avec `failed=0`
+- [ ] Sur la cible: `systemctl is-active mariadb wildfly httpd` (`apache2` sous Debian/Ubuntu) renvoie `active` pour chacun
+- [ ] `ss -tlnp | egrep ':443|:8080|:8443|:3306'` montre les ports attendus
+- [ ] `curl -kI https://<fqdn>/ejbca/ra/` repond (ajouter le FQDN dans `/etc/hosts` du poste client si besoin)
+- [ ] P12 du SuperAdmin recupere dans le repertoire de sortie du controleur et importe dans le navigateur pour acceder a `https://<fqdn>/ejbca/adminweb/`
+- [ ] CA listees: `sudo -u wildfly /opt/ejbca/bin/ejbca.sh ca listcas`
+- [ ] Relancer le playbook une fois: il doit etre idempotent (aucun echec)
+
 ## Scenario base distante
 
 Cette copie `ansible_ejbca-ce` supporte deux modes principaux:
@@ -171,7 +222,7 @@ Et dans les `host_vars`:
 ```yaml
 # host_vars/<pki-server>.yml
 ansible_host: <IP_DU_SERVEUR_PKI>
-ansible_user: fenetre2000
+ansible_user: ansible-user
 pki_server_name: <pki-server>
 pki_domain_name: "{{ domain_name }}"
 ```
@@ -179,7 +230,7 @@ pki_domain_name: "{{ domain_name }}"
 ```yaml
 # host_vars/<db-server>.yml
 ansible_host: <IP_DU_SERVEUR_DB>
-ansible_user: fenetre2000
+ansible_user: ansible-user
 hostname: <db-server>.domain.local
 ```
 
@@ -238,10 +289,12 @@ Voici les versions principales visees ou observees sur le serveur PKI.
 - Paquet Java Debian utilise : `default-jdk-headless` version `2:1.21-76`
 - Paquet OpenJDK Debian : `openjdk-21-jdk-headless` version `21.0.10+7-1~deb13u1`
 - MariaDB serveur : `11.8.3-0+deb13u1`
-- Driver JDBC PostgreSQL configure : `42.7.5`
+- Driver JDBC PostgreSQL configure : `42.7.14`
 - SoftHSM : `2.6.1-3`
-- Apache Ant : `1.10.15`
-- Driver JDBC MariaDB : `3.5.2`
+- Apache Ant : `1.10.18`
+- Driver JDBC MariaDB : `3.5.10`
+
+Note: les versions d'Ant et des drivers JDBC (et leurs checksums SHA256) ont ete mises a jour dans `group_vars/all.yml` et `group_vars/mariadbServers.yml`. Les drivers JDBC sont desormais telecharges depuis Maven Central et Ant depuis `archive.apache.org`. Ces mises a jour n'ont pas encore ete revalidees par un deploiement complet. EJBCA CE (`9.3.7`), WildFly (`35.0.1.Final`) et Galleon (`6.0.5`) sont volontairement conserves: EJBCA CE 9.6 impose l'edition Enterprise pour les crypto tokens HSM, et WildFly 41 demande de revoir le template `standalone`.
 
 Informations utiles:
 
@@ -376,20 +429,20 @@ Le controleur Ansible doit pouvoir se connecter en SSH avec l'utilisateur defini
 
 Dans ce workspace, c'est actuellement:
 
-- utilisateur SSH : `fenetre2000`
+- utilisateur SSH : `ansible-user`
 - hote cible : valeur de `pki_server_name` dans `host_vars`
 - FQDN applicatif : `<pki-server>.<domain_name>`
 
 Verifications conseillees:
 
 1. La connexion SSH fonctionne sans blocage interactif inattendu.
-2. La cle publique du controleur est bien presente dans `~fenetre2000/.ssh/authorized_keys` si vous utilisez des cles.
+2. La cle publique du controleur est bien presente dans `~ansible-user/.ssh/authorized_keys` si vous utilisez des cles.
 3. Si vous utilisez un mot de passe SSH, vous lancez Ansible avec `--ask-pass`.
 
 Test simple:
 
 ```bash
-ssh fenetre2000@<pki-server>
+ssh ansible-user@<pki-server>
 ```
 
 #### Creer une paire de cles SSH sur le poste Ansible
@@ -412,13 +465,13 @@ Si vous voulez eviter toute invite de passphrase pour les executions automatique
 La methode la plus simple est `ssh-copy-id`:
 
 ```bash
-ssh-copy-id -i ~/.ssh/ansible_pki.pub fenetre2000@<pki-server>
+ssh-copy-id -i ~/.ssh/ansible_pki.pub ansible-user@<pki-server>
 ```
 
 Ensuite, tester explicitement la cle:
 
 ```bash
-ssh -i ~/.ssh/ansible_pki fenetre2000@<pki-server>
+ssh -i ~/.ssh/ansible_pki ansible-user@<pki-server>
 ```
 
 Si `ssh-copy-id` n'est pas disponible, vous pouvez copier la cle manuellement:
@@ -430,7 +483,7 @@ cat ~/.ssh/ansible_pki.pub
 Puis ajouter son contenu dans:
 
 ```bash
-~fenetre2000/.ssh/authorized_keys
+~ansible-user/.ssh/authorized_keys
 ```
 
 sur la machine cible, avec des permissions correctes:
@@ -453,7 +506,7 @@ Si vous voulez l'indiquer dans l'inventaire, vous pouvez ajouter:
 ```yaml
 <pki-server>:
   ansible_host: <IP_DU_SERVEUR>
-  ansible_user: fenetre2000
+  ansible_user: ansible-user
   ansible_ssh_private_key_file: ~/.ssh/ansible_pki
 ```
 
@@ -476,7 +529,7 @@ Si cette commande echoue, ce n'est pas forcement bloquant, mais il faudra lancer
 
 #### Creer un fichier dedie dans /etc/sudoers.d
 
-Si vous voulez autoriser `fenetre2000` a utiliser `sudo` sans mot de passe pour Ansible, le plus propre est de creer un fichier dedie dans `/etc/sudoers.d/`.
+Si vous voulez autoriser `ansible-user` a utiliser `sudo` sans mot de passe pour Ansible, le plus propre est de creer un fichier dedie dans `/etc/sudoers.d/`.
 
 Commande simple a executer directement sur la machine cible avec l'utilisateur concerne:
 
@@ -491,23 +544,23 @@ Cette variante cree un fichier sudoers portant le nom de l'utilisateur courant.
 Sur la machine cible, en tant que `root` ou avec un compte deja autorise a utiliser `sudo`:
 
 ```bash
-printf 'fenetre2000 ALL=(ALL) NOPASSWD:ALL\n' | sudo tee /etc/sudoers.d/fenetre2000-ansible >/dev/null
-sudo chmod 440 /etc/sudoers.d/fenetre2000-ansible
-sudo visudo -cf /etc/sudoers.d/fenetre2000-ansible
+printf 'ansible-user ALL=(ALL) NOPASSWD:ALL\n' | sudo tee /etc/sudoers.d/ansible-user-ansible >/dev/null
+sudo chmod 440 /etc/sudoers.d/ansible-user-ansible
+sudo visudo -cf /etc/sudoers.d/ansible-user-ansible
 ```
 
 Si vous preferez exiger un mot de passe sudo, utilisez plutot:
 
 ```bash
-printf 'fenetre2000 ALL=(ALL) ALL\n' | sudo tee /etc/sudoers.d/fenetre2000-ansible >/dev/null
-sudo chmod 440 /etc/sudoers.d/fenetre2000-ansible
-sudo visudo -cf /etc/sudoers.d/fenetre2000-ansible
+printf 'ansible-user ALL=(ALL) ALL\n' | sudo tee /etc/sudoers.d/ansible-user-ansible >/dev/null
+sudo chmod 440 /etc/sudoers.d/ansible-user-ansible
+sudo visudo -cf /etc/sudoers.d/ansible-user-ansible
 ```
 
 Verification rapide depuis la cible:
 
 ```bash
-sudo -l -U fenetre2000
+sudo -l -U ansible-user
 ```
 
 Verification depuis le poste Ansible:
@@ -580,8 +633,8 @@ Si vous voulez juste la checklist minimum cote cible, verifier au moins ceci:
 1. `python3` est installe.
 2. `sudo` est installe.
 3. `sshd` est actif.
-4. `fenetre2000` se connecte en SSH.
-5. `fenetre2000` peut utiliser `sudo`.
+4. `ansible-user` se connecte en SSH.
+5. `ansible-user` peut utiliser `sudo`.
 6. Le FQDN du serveur PKI se resout correctement.
 7. La machine a acces a Internet ou a vos depots locaux.
 
@@ -590,7 +643,7 @@ Si vous voulez juste la checklist minimum cote cible, verifier au moins ceci:
 Avant d'executer `deployCeNode.yml`, valider rapidement cette liste:
 
 1. La cible repond en SSH sur la bonne IP.
-2. L'utilisateur `fenetre2000` existe sur la cible.
+2. L'utilisateur `ansible-user` existe sur la cible.
 3. `python3`, `sudo` et `openssh-server` sont installes.
 4. `sudo -n true` fonctionne, ou bien vous prevoyez `--ask-become-pass`.
 5. L'entree du serveur PKI dans `inventory` pointe vers la bonne adresse.
@@ -622,26 +675,26 @@ systemctl enable --now ssh
 
 #### 2. Creer l'utilisateur distant utilise par Ansible
 
-Si l'utilisateur `fenetre2000` n'existe pas encore:
+Si l'utilisateur `ansible-user` n'existe pas encore:
 
 ```bash
-adduser fenetre2000
+adduser ansible-user
 ```
 
 Ou en mode plus scriptable:
 
 ```bash
-useradd -m -s /bin/bash fenetre2000
-passwd fenetre2000
+useradd -m -s /bin/bash ansible-user
+passwd ansible-user
 ```
 
 #### 3. Preparer le repertoire SSH de l'utilisateur
 
 ```bash
-install -d -m 700 -o fenetre2000 -g fenetre2000 /home/fenetre2000/.ssh
-touch /home/fenetre2000/.ssh/authorized_keys
-chown fenetre2000:fenetre2000 /home/fenetre2000/.ssh/authorized_keys
-chmod 600 /home/fenetre2000/.ssh/authorized_keys
+install -d -m 700 -o ansible-user -g ansible-user /home/ansible-user/.ssh
+touch /home/ansible-user/.ssh/authorized_keys
+chown ansible-user:ansible-user /home/ansible-user/.ssh/authorized_keys
+chmod 600 /home/ansible-user/.ssh/authorized_keys
 ```
 
 #### 4. Generer une cle SSH sur le poste Ansible
@@ -657,13 +710,13 @@ ssh-keygen -t ed25519 -f ~/.ssh/ansible_pki -C "ansible@<pki-server>"
 Depuis le poste Ansible:
 
 ```bash
-ssh-copy-id -i ~/.ssh/ansible_pki.pub fenetre2000@<pki-server>
+ssh-copy-id -i ~/.ssh/ansible_pki.pub ansible-user@<pki-server>
 ```
 
 Si necessaire, vous pouvez aussi ajouter la cle manuellement dans:
 
 ```bash
-/home/fenetre2000/.ssh/authorized_keys
+/home/ansible-user/.ssh/authorized_keys
 ```
 
 #### 6. Donner les droits sudo via /etc/sudoers.d
@@ -671,17 +724,17 @@ Si necessaire, vous pouvez aussi ajouter la cle manuellement dans:
 Sur la cible, creer un fichier dedie:
 
 ```bash
-printf 'fenetre2000 ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/fenetre2000-ansible
-chmod 440 /etc/sudoers.d/fenetre2000-ansible
-visudo -cf /etc/sudoers.d/fenetre2000-ansible
+printf 'ansible-user ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/ansible-user-ansible
+chmod 440 /etc/sudoers.d/ansible-user-ansible
+visudo -cf /etc/sudoers.d/ansible-user-ansible
 ```
 
 Si vous ne voulez pas de `NOPASSWD`, utilisez a la place:
 
 ```bash
-printf 'fenetre2000 ALL=(ALL) ALL\n' > /etc/sudoers.d/fenetre2000-ansible
-chmod 440 /etc/sudoers.d/fenetre2000-ansible
-visudo -cf /etc/sudoers.d/fenetre2000-ansible
+printf 'ansible-user ALL=(ALL) ALL\n' > /etc/sudoers.d/ansible-user-ansible
+chmod 440 /etc/sudoers.d/ansible-user-ansible
+visudo -cf /etc/sudoers.d/ansible-user-ansible
 ```
 
 #### 7. Verifier le hostname et la resolution DNS
@@ -701,7 +754,7 @@ Si le DNS n'est pas encore en place, ajouter une entree locale au besoin.
 Depuis le poste Ansible:
 
 ```bash
-ssh -i ~/.ssh/ansible_pki fenetre2000@<pki-server>
+ssh -i ~/.ssh/ansible_pki ansible-user@<pki-server>
 ```
 
 #### 9. Verifier l'inventaire Ansible
@@ -711,7 +764,7 @@ Dans ce depot, verifier que `inventory` contient bien quelque chose de ce type:
 ```yaml
 <pki-server>:
   ansible_host: <IP_DU_SERVEUR>
-  ansible_user: fenetre2000
+  ansible_user: ansible-user
   ansible_ssh_private_key_file: ~/.ssh/ansible_pki
 ```
 
@@ -736,7 +789,7 @@ ansible-playbook -i inventory -l <pki-server> deployCeNode.yml
 ### Test SSH
 
 ```bash
-ssh fenetre2000@<pki-server>
+ssh ansible-user@<pki-server>
 ```
 
 ### Test Ansible
@@ -864,7 +917,7 @@ Donc il n'est pas expose publiquement. Il n'est accessible que depuis la machine
 Exemple de tunnel SSH depuis ta machine:
 
 ```bash
-ssh -L 9990:127.0.0.1:9990 fenetre2000@<pki-server>
+ssh -L 9990:127.0.0.1:9990 ansible-user@<pki-server>
 ```
 
 Puis dans ton navigateur:
@@ -964,7 +1017,7 @@ Sur cette version, deux points importants ont du etre pris en compte:
 Verifier en priorite:
 
 1. la connectivite SSH vers le serveur PKI
-2. les droits sudo de `fenetre2000`
+2. les droits sudo de `ansible-user`
 3. le FQDN de la machine cible
 4. l'acces Internet de la machine cible
 5. les logs WildFly sur la cible

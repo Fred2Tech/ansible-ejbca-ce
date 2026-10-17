@@ -8,8 +8,9 @@ ENV_FILE="${ENV_FILE:-${REPO_DIR}/.env}"
 
 if [[ -f "${ENV_FILE}" ]]; then
   set -a
+  # Strip CR characters so a .env copied from Windows (CRLF) still loads
   # shellcheck disable=SC1090
-  . "${ENV_FILE}"
+  . <(tr -d '\r' < "${ENV_FILE}")
   set +a
 fi
 
