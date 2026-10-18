@@ -294,7 +294,7 @@ Le workspace a deja ete adapte pour:
 - valider aussi Red Hat Enterprise Linux 10.1 sur `<pki-server>` et `<db-server>` pour MariaDB et PostgreSQL, en local et en remote
 - valider aussi Ubuntu 24.04 sur `<pki-server>` et `<db-server>` pour MariaDB et PostgreSQL, en local et en remote
 - corriger trois problemes de timing specifiques a Ubuntu 24.04: persistance en base apres `ra addendentity`, disponibilite du bean `GlobalConfigurationSessionBean` avant les commandes `config protocols`, et race condition systemd lors de l'arret de WildFly en toute premiere installation
-- pointer vers EJBCA CE `9.3.7`
+- pointer vers EJBCA CE `9.6.3`
 
 ## Matrice de validation
 
@@ -324,7 +324,7 @@ Lecture rapide:
 
 Voici les versions principales visees ou observees sur le serveur PKI.
 
-- EJBCA Community : `9.3.7`
+- EJBCA Community : `9.6.3`
 - WildFly : `35.0.1.Final`
 - WildFly Galleon : `6.0.5`
 - OpenJDK runtime detecte : `21.0.10`
@@ -336,12 +336,12 @@ Voici les versions principales visees ou observees sur le serveur PKI.
 - Apache Ant : `1.10.18`
 - Driver JDBC MariaDB : `3.5.10`
 
-Note: les versions d'Ant et des drivers JDBC (et leurs checksums SHA256) ont ete mises a jour dans `group_vars/all.yml` et `group_vars/mariadbServers.yml`. Les drivers JDBC sont desormais telecharges depuis Maven Central et Ant depuis `archive.apache.org`. Ces mises a jour n'ont pas encore ete revalidees par un deploiement complet. EJBCA CE (`9.3.7`), WildFly (`35.0.1.Final`) et Galleon (`6.0.5`) sont volontairement conserves: EJBCA CE 9.6 impose l'edition Enterprise pour les crypto tokens HSM, et WildFly 41 demande de revoir le template `standalone`.
+Note: les versions d'Ant et des drivers JDBC (et leurs checksums SHA256) ont ete mises a jour dans `group_vars/all.yml` et `group_vars/mariadbServers.yml`. Les drivers JDBC sont desormais telecharges depuis Maven Central et Ant depuis `archive.apache.org`. Ces mises a jour n'ont pas encore ete revalidees par un deploiement complet. EJBCA CE est maintenant en `9.6.3` (voir « Particularites EJBCA 9.6 »). WildFly (`35.0.1.Final`) et Galleon (`6.0.5`) sont volontairement conserves: WildFly 35 reste supporte par EJBCA 9.6, et WildFly 39/41 demanderaient de revoir le template `standalone`.
 
 Informations utiles:
 
 - le repertoire WildFly observe sur la cible est `/opt/wildfly-35.0.1.Final`
-- le repertoire source EJBCA observe sur la cible est `/opt/ejbca-ce-r9.3.7`
+- le repertoire source EJBCA observe sur la cible est `/opt/ejbca-ce-r9.6.3`
 - le driver JDBC deploie dans WildFly depend du moteur choisi: `mariadb-java-client.jar` ou `postgresql.jar`
 
 ## Centralisation des users, groups et passwords
@@ -1042,10 +1042,19 @@ Remarque:
 Le fichier `group_vars/ceServers.yml` est aligne sur:
 
 ```yaml
-ejbca_version: 9.3.7
-ejbca_software_url: https://github.com/Keyfactor/ejbca-ce/archive/refs/tags/r9.3.7.zip
-ejbca_src_dir_name: ejbca-ce-r9.3.7
+ejbca_version: 9.6.3
+ejbca_software_url: https://github.com/Keyfactor/ejbca-ce/archive/refs/tags/r9.6.3.zip
+ejbca_src_dir_name: ejbca-ce-r9.6.3
 ```
+
+## Particularites EJBCA 9.6
+
+- des la 9.6, **les crypto tokens HSM (PKCS#11) necessitent EJBCA Enterprise**. Ce projet cree ses CA avec `SoftCryptoToken` (`tokentype: soft`), il n'est donc pas concerne. Ne pas mettre `tokentype: PKCS11CryptoToken` sur EJBCA Community 9.6 et superieur
+- WildFly 35 reste supporte par EJBCA 9.6 (supportes: 32, 35, 38, 39, 41), WildFly n'a donc pas ete modifie
+- Java 21.0.5 ou superieur est requis
+- plusieurs proprietes sont passees des fichiers `conf` a la base de donnees (copiees automatiquement a la mise a jour)
+- la colonne des Subject Alternative Names passe de 2000 a 8000 caracteres
+- les contournements 9.3.7 ci-dessous (`--tokenPass`, derniere ligne de `CaIdGenerator`) sont conserves; ils n'ont pas encore ete reverifies sur la 9.6
 
 ## Particularites EJBCA 9.3.7
 

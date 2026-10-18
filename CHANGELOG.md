@@ -2,6 +2,24 @@
 
 French version: [CHANGELOG.fr.md](CHANGELOG.fr.md)
 
+## 2026-10-17 - EJBCA Community 9.6.3
+
+### Changed
+
+- EJBCA CE `9.3.7` -> `9.6.3` in `group_vars/ceServers.yml` (`ejbca_version`, `ejbca_remote_dir`, `ejbca_software_url`, `ejbca_src_dir_name`, `ejbca_upgrade_version`) and in both READMEs.
+- WildFly `35.0.1.Final` is kept: it is still listed as supported by EJBCA 9.6.
+
+### Fixed
+
+- `roles/ansible-ejbca-complete-upgrade`: `ant upgrade` ran in about one second and printed nothing, and the post-upgrade warning stayed in the Admin UI ("Post upgrade is required..."). The role now calls `ejbca.sh upgrade` directly (the same operation as the "System Upgrade" menu), which prints its result and returns an exit code. The task fails on `Post Upgrade not performed`, `failed` or `was interrupted`, and reports `changed` on `Post Upgrade completed`.
+- `roles/ansible-ejbca-upgrade`: after copying the new EAR, the role now waits until WildFly has redeployed it (the `ejbca.ear.deployed` marker is refreshed) and fails clearly if `ejbca.ear.failed` appears. Previously `ant upgrade` (role `ansible-ejbca-complete-upgrade`) ran right after the copy, possibly before the new EAR was running.
+
+### Compatibility notes
+
+- EJBCA CE 9.6 requires Enterprise Edition for HSM crypto tokens. The CAs of this project use `SoftCryptoToken`, so they are not affected. Do not use `tokentype: PKCS11CryptoToken` with CE 9.6+.
+- Java 21.0.5 or later is required (the test node runs 21.0.10).
+- Not yet validated on a live node: run a fresh deployment, or `upgradeEjbca.yml` on an existing one. The 9.3.7 workarounds (`--tokenPass`, `CaIdGenerator` last line) are kept and still need to be re-checked.
+
 ## 2026-10-16 - Deployment checklist and test node
 
 ### Added
@@ -65,8 +83,7 @@ The PostgreSQL checksum was previously empty, so the download was not verified. 
 
 | Component | Kept | Latest available | Reason |
 | --- | --- | --- | --- |
-| EJBCA CE | `9.3.7` | `9.6.3` | As of 9.6, HSM crypto tokens require EJBCA Enterprise, while this project ships SoftHSM/PKCS#11 roles. Compatibility with WildFly 35 is also unconfirmed. |
-| WildFly | `35.0.1.Final` | `41.0.1.Final` | Large jump: the `standalone-35.xml.datasource.j2` template and the jboss-client checksum must be reviewed. |
+| WildFly | `35.0.1.Final` | `41.0.1.Final` | Still supported by EJBCA 9.6. A move to 39/41 requires reviewing the `standalone-35.xml.datasource.j2` template, the Galleon version and the jboss-client checksum. |
 | WildFly Galleon | `6.0.5` | `7.0.11.Final` | Tied to the WildFly upgrade. |
 | MariaDB server | `11.8` | `11.8` is still LTS | No change needed. |
 

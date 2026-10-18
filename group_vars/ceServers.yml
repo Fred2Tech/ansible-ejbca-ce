@@ -18,17 +18,17 @@ configdump_import_files: "{{ configdump_files }}"
 add_publshers_to_cas: true
 
 # Version and source
-ejbca_version: 9.3.7
+ejbca_version: 9.6.3
 # Use local controller as software repository
 use_local_repository: false
-ejbca_remote_dir: ~/Downloads/PK-Software/ejbca-ce-r9.3.7.zip
+ejbca_remote_dir: ~/Downloads/PK-Software/ejbca-ce-r9.6.3.zip
 # EJBCA URL to download the zip release file
-ejbca_software_url: https://github.com/Keyfactor/ejbca-ce/archive/refs/tags/r9.3.7.zip
-ejbca_src_dir_name: ejbca-ce-r9.3.7
+ejbca_software_url: https://github.com/Keyfactor/ejbca-ce/archive/refs/tags/r9.6.3.zip
+ejbca_src_dir_name: ejbca-ce-r9.6.3
 ejbca_type: CA
 
 # EJBCA Upgrade version
-ejbca_upgrade_version: 9.3.7
+ejbca_upgrade_version: 9.6.3
 # Upgrade download URL
 ejbca_upgrade_software_url: "{{ ejbca_software_url }}"
 # Upgrade source directory

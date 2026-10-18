@@ -74,6 +74,11 @@
       args:
         chdir: "{{ ejbca_home }}"
 
+    - name: Record the EJBCA EAR deployment marker before copying the new EAR
+      ansible.builtin.stat:
+        path: "{{ wildfly_home }}/standalone/deployments/ejbca.ear.deployed"
+      register: ejbca_ear_marker_before
+
     - name: Ensure EJBCA EAR file is copied to application server if application server exists
       ansible.builtin.copy:
         src: "{{ ejbca_home }}/dist/ejbca.ear"
@@ -82,6 +87,31 @@
         owner: "{{ ejbca_user }}"
         group: "{{ ejbca_group }}"
         dest: "{{ wildfly_home }}/standalone/deployments/ejbca.ear"
+
+    # `ant upgrade` talks to the running application, so wait for WildFly to redeploy the new EAR first
+    - name: Wait until WildFly has redeployed the new EJBCA EAR
+      ansible.builtin.stat:
+        path: "{{ wildfly_home }}/standalone/deployments/ejbca.ear.deployed"
+      register: ejbca_ear_marker_after
+      until:
+        - ejbca_ear_marker_after.stat.exists
+        - not ejbca_ear_marker_before.stat.exists or ejbca_ear_marker_after.stat.mtime > ejbca_ear_marker_before.stat.mtime
+      retries: 60
+      delay: 10
+      when: wildfly_manage_service | default(true) | bool
+
+    - name: Check that the EJBCA EAR deployment did not fail
+      ansible.builtin.stat:
+        path: "{{ wildfly_home }}/standalone/deployments/ejbca.ear.failed"
+      register: ejbca_ear_failed_after_upgrade
+      when: wildfly_manage_service | default(true) | bool
+
+    - name: Fail if the EJBCA EAR deployment failed
+      ansible.builtin.fail:
+        msg: "EJBCA deployment failed, see {{ wildfly_home }}/standalone/deployments/ejbca.ear.failed and {{ wildfly_home }}/standalone/log/server.log"
+      when:
+        - ejbca_ear_failed_after_upgrade.stat is defined
+        - ejbca_ear_failed_after_upgrade.stat.exists | default(false)
 
   when:
     - (unpacked_ejbca is defined and unpacked_ejbca.changed) or

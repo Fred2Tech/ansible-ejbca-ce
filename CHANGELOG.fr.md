@@ -2,6 +2,24 @@
 
 Version anglaise : [CHANGELOG.md](CHANGELOG.md)
 
+## 2026-10-17 - EJBCA Community 9.6.3
+
+### Modifie
+
+- EJBCA CE `9.3.7` -> `9.6.3` dans `group_vars/ceServers.yml` (`ejbca_version`, `ejbca_remote_dir`, `ejbca_software_url`, `ejbca_src_dir_name`, `ejbca_upgrade_version`) et dans les deux README.
+- WildFly `35.0.1.Final` est conserve: il est toujours liste comme supporte par EJBCA 9.6.
+
+### Corrige
+
+- `roles/ansible-ejbca-complete-upgrade`: `ant upgrade` s'executait en environ une seconde sans rien afficher, et l'avertissement de post-migration restait dans l'Admin UI (« Post upgrade is required... »). Le role appelle maintenant directement `ejbca.sh upgrade` (meme operation que le menu « System Upgrade »), qui affiche son resultat et renvoie un code retour. La tache echoue sur `Post Upgrade not performed`, `failed` ou `was interrupted`, et est `changed` sur `Post Upgrade completed`.
+- `roles/ansible-ejbca-upgrade`: apres la copie du nouvel EAR, le role attend maintenant que WildFly l'ait redeploye (le marqueur `ejbca.ear.deployed` est rafraichi) et echoue clairement si `ejbca.ear.failed` apparait. Auparavant `ant upgrade` (role `ansible-ejbca-complete-upgrade`) s'executait juste apres la copie, peut-etre avant que le nouvel EAR ne tourne.
+
+### Notes de compatibilite
+
+- EJBCA CE 9.6 impose l'edition Enterprise pour les crypto tokens HSM. Les CA de ce projet utilisent `SoftCryptoToken`, elles ne sont donc pas concernees. Ne pas utiliser `tokentype: PKCS11CryptoToken` avec CE 9.6+.
+- Java 21.0.5 ou superieur est requis (le noeud de test utilise 21.0.10).
+- Pas encore valide sur un noeud reel: faire un deploiement neuf, ou `upgradeEjbca.yml` sur un noeud existant. Les contournements 9.3.7 (`--tokenPass`, derniere ligne de `CaIdGenerator`) sont conserves et restent a reverifier.
+
 ## 2026-10-16 - Checklist de deploiement et noeud de test
 
 ### Ajoute
@@ -65,8 +83,7 @@ Le checksum PostgreSQL etait vide auparavant: le telechargement n'etait donc pas
 
 | Composant | Conserve | Derniere version | Raison |
 | --- | --- | --- | --- |
-| EJBCA CE | `9.3.7` | `9.6.3` | Des la 9.6, les crypto tokens HSM necessitent EJBCA Enterprise, alors que le projet fournit des roles SoftHSM/PKCS#11. La compatibilite avec WildFly 35 n'est pas non plus confirmee. |
-| WildFly | `35.0.1.Final` | `41.0.1.Final` | Saut important: le template `standalone-35.xml.datasource.j2` et le checksum du client jboss sont a revoir. |
+| WildFly | `35.0.1.Final` | `41.0.1.Final` | Toujours supporte par EJBCA 9.6. Passer en 39/41 demande de revoir le template `standalone-35.xml.datasource.j2`, la version de Galleon et le checksum du client jboss. |
 | WildFly Galleon | `6.0.5` | `7.0.11.Final` | Lie a la montee de version de WildFly. |
 | MariaDB serveur | `11.8` | `11.8` est toujours LTS | Aucun changement necessaire. |
 

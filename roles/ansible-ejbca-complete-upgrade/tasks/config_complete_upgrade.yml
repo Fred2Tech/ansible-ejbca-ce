@@ -1,7 +1,9 @@
 ---
 
-- name: Complete EJBCA upgrade
-  ansible.builtin.command: ant upgrade
+- name: Complete EJBCA upgrade (post-upgrade)
+  # `ant upgrade` runs the same CLI command but prints nothing and ignores its exit code,
+  # so the CLI is called directly (this is also what the "System Upgrade" menu does).
+  ansible.builtin.command: "{{ ejbca_sh }} upgrade"
   become: true
   become_user: "{{ ejbca_user }}"
   environment:
@@ -9,3 +11,9 @@
   args:
     chdir: "{{ ejbca_home }}"
   register: ejbca_upgrade_result
+  failed_when: >-
+    ejbca_upgrade_result.rc != 0 or
+    'Post Upgrade not performed' in (ejbca_upgrade_result.stdout ~ ejbca_upgrade_result.stderr) or
+    'Post Upgrade failed' in (ejbca_upgrade_result.stdout ~ ejbca_upgrade_result.stderr) or
+    'Post Upgrade was interrupted' in (ejbca_upgrade_result.stdout ~ ejbca_upgrade_result.stderr)
+  changed_when: "'Post Upgrade completed' in (ejbca_upgrade_result.stdout ~ ejbca_upgrade_result.stderr)"
